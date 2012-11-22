@@ -1,0 +1,7 @@
+"""
+init.ipy
+Meant to be run as a sccript from ipython for interactive use of the scaffold
+Auto-imports modules meant for interactive use
+"""
+
+%aimport scaffold

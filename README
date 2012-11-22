@@ -1,1 +1,7 @@
-This file was created by PyCharm (2.7 EAP) PY-122.790 for binding GitHub repository
+Scaffold
+--------
+
+A Python scaffold for running experiments on iterative stochastic algorithms.
+
+[Planned] features:
+* Run experiments remotely, via picloud
