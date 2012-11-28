@@ -32,7 +32,7 @@ def test_datasource():
     assert n_total == n_train+n_test
     assert int(.3*n_total)==n_test
 
-def test_sample():
+def test_discrete_sample():
     from util import sample
     w = asarray([3, 6, 2], double)
     r = w/sum(w)
@@ -43,3 +43,17 @@ def test_sample():
     assert_almost_equal(w_sampled[0], r[0], delta=delta)
     assert_almost_equal(w_sampled[1], r[1], delta=delta)
     assert_almost_equal(w_sampled[2], r[2], delta=delta)
+
+def test_data_store():
+    from scaffold import LocalStore, CloudStore
+    obj_in = [1, 2, ('a', 'b'), 3]
+    local = LocalStore()
+    local.store(obj_in, 'test')
+    local.close()
+    local = LocalStore()
+    obj_out = local.load('test')
+    assert obj_in==obj_out
+    cloud_store = CloudStore()
+    cloud_store.store(obj_in, 'test')
+    obj_out = cloud_store.load('test')
+    assert obj_in==obj_out

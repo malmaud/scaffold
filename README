@@ -4,4 +4,5 @@ Scaffold
 A Python scaffold for running experiments on iterative stochastic algorithms.
 
 [Planned] features:
+
 * Run experiments remotely, via picloud

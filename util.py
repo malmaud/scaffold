@@ -5,6 +5,10 @@ A set of utility functions used in various modules
 from __future__ import division
 from numpy import *
 from pdb import set_trace
+import logging
+import joblib
+
+memory = joblib.Memory('./data', mmap_mode='r', verbose=1)
 
 def sample(w, n, rng=random):
     """

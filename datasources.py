@@ -23,6 +23,9 @@ class Cluster:
     def dim(self):
         return len(self.mu)
 
+    def sample_points(self, n, rng=random):
+        return rng.multivariate_normal(self.mu, self.cov, size=n)
+
 class FiniteMixture(DataSource):
     """
     A Gaussian finite mixture model
@@ -39,7 +42,6 @@ class FiniteMixture(DataSource):
         self.data = empty((self.n_points, dim))
         for i, cluster in enumerate(self.clusters):
             idx = self.c==i
-            cluster = self.clusters[i]
             n_in_cluster = int(sum(idx))
-            self.data[idx] = self.rng.multivariate_normal(cluster.mu, cluster.cov,  size=n_in_cluster)
+            self.data[idx] = cluster.sample_points(n_in_cluster)
 
