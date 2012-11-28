@@ -33,12 +33,36 @@ def test_datasource():
     assert int(.3*n_total)==n_test
 
 def test_discrete_sample():
-    from util import sample
-    w = asarray([3, 6, 2], double)
+    from util import discrete_sample
+    w = asarray([3, 6, 2], 'd')
     r = w/sum(w)
     rng = random.RandomState(0)
-    samples = sample(w, 1e5, rng)
+    samples = discrete_sample(w, 1e5, rng=rng)
     w_sampled = bincount(samples)/len(samples)
+    delta = .05
+    assert_almost_equal(w_sampled[0], r[0], delta=delta)
+    assert_almost_equal(w_sampled[1], r[1], delta=delta)
+    assert_almost_equal(w_sampled[2], r[2], delta=delta)
+
+    samples = discrete_sample(log(w), 1e5, rng=rng, log_mode=True)
+    w_sampled = bincount(samples)/len(samples)
+    delta = .05
+    assert_almost_equal(w_sampled[0], r[0], delta=delta)
+    assert_almost_equal(w_sampled[1], r[1], delta=delta)
+    assert_almost_equal(w_sampled[2], r[2], delta=delta)
+
+    samples = discrete_sample(w, 1e5, rng, temperature=10000)
+    r = repeat(1/len(w), len(w))
+    w_sampled = bincount(samples)/len(samples)
+    delta = .05
+    assert_almost_equal(w_sampled[0], r[0], delta=delta)
+    assert_almost_equal(w_sampled[1], r[1], delta=delta)
+    assert_almost_equal(w_sampled[2], r[2], delta=delta)
+
+    samples = discrete_sample(w, 1e5, rng, temperature=.001)
+    w_sampled = bincount(samples)/len(samples)
+    r = zeros_like(w)
+    r[argmax(w)] = 1
     delta = .05
     assert_almost_equal(w_sampled[0], r[0], delta=delta)
     assert_almost_equal(w_sampled[1], r[1], delta=delta)

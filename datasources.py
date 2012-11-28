@@ -1,5 +1,6 @@
 """
 datasources.py
+
 Implementation of some common procedurally-generated datasets
 """
 
@@ -16,14 +17,24 @@ class Cluster:
         self.mu = None
         self.cov = None
         if mu is not None:
-            self.mu = asarray(mu, double)
+            self.mu = asarray(mu, 'd')
         if cov is not None:
-            self.cov = asarray(cov, double)
+            self.cov = asarray(cov, 'd')
 
     def dim(self):
+        """
+        :return: The cluster dimensionality
+        """
         return len(self.mu)
 
     def sample_points(self, n, rng=random):
+        """
+        Sample points from the cluster
+
+        :param n: The number of points
+        :param rng: The random-number generator
+        :return: An *n* x *dim* array. Each row is a point; each column is a dimension.
+        """
         return rng.multivariate_normal(self.mu, self.cov, size=n)
 
 class FiniteMixture(DataSource):
@@ -31,6 +42,22 @@ class FiniteMixture(DataSource):
     A Gaussian finite mixture model
     """
     def load(self):
+        """
+        Loads the latent variables and data implicitly given by the class's parameters (in *self.param*)
+
+        Expected parameter keys:
+
+        n_points
+         Number of points in the dataset
+
+        clusters
+         A list of clusters of type Cluster_
+
+        weights
+         A list of mixing weights for each cluster in *clusters*
+
+        :raise:
+        """
         try:
             self.n_points = self.params['n_points']
             self.clusters = self.params['clusters']
@@ -38,7 +65,7 @@ class FiniteMixture(DataSource):
         except KeyError as error:
             raise ParameterException("Required finite mixture parameter not passed in: %r" % error)
         dim = self.clusters[0].dim()
-        self.c = util.sample(self.weights, self.n_points, self.rng)
+        self.c = util.discrete_sample(self.weights, self.n_points, self.rng)
         self.data = empty((self.n_points, dim))
         for i, cluster in enumerate(self.clusters):
             idx = self.c==i

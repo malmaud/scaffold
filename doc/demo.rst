@@ -1,0 +1,5 @@
+Demo
+=======
+
+.. automodule:: demo
+   :members:

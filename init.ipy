@@ -9,5 +9,5 @@ from __future__ import division
 %aimport scaffold
 %aimport util
 %aimport datasources
-%aimport test_set
+%aimport test_suite
 %aimport demo

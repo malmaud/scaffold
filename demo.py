@@ -1,6 +1,7 @@
 """
 demo.py
-A simple example of using the scaffold
+
+A simple, illustrative example of using the scaffold.
 """
 
 from __future__ import division

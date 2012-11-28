@@ -3,3 +3,4 @@
 doc/_build
 data
 scratch.py
+*.lprof
