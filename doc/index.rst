@@ -13,12 +13,10 @@ Contents:
 
    getting_started
    scaffold
+   storage
    datasources
    util
    demo
-
-
-
 
 
 Indices and tables

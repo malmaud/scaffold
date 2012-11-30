@@ -1,6 +1,7 @@
 """
 init.ipy
-Meant to be run as a sccript from ipython for interactive use/debugging of the scaffold
+Meant to be run as a script from ipython for interactive use/debugging of the scaffold
+
 Auto-imports modules meant for interactive use
 """
 from __future__ import division
@@ -11,3 +12,4 @@ from __future__ import division
 %aimport datasources
 %aimport test_suite
 %aimport demo
+%aimport storage

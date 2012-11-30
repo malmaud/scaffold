@@ -11,9 +11,6 @@ import time
 import itertools
 from copy import deepcopy
 import util
-import shelve
-import cPickle
-import StringIO
 
 class VirtualException(BaseException):
     """
@@ -35,9 +32,7 @@ class State(object):
     At a minimum, a state object will have the following attributes:
 
     iter
-     The iteration number of the algorithm that this state corresponds to. State 0 corresponds to the initial state of
-     the algorithm, before any transitions have been applied. The last state is state that caused *do_stop* to return
-     *True*.
+     The iteration number of the algorithm that this state corresponds to. State 0 corresponds to the initial state of the algorithm, before any transitions have been applied. The last state is state that caused *do_stop* to return *True*.
 
     time
      The time (in seconds since epoch) that this state was created. Mainly used to assess runtime of algorithms.
@@ -99,6 +94,11 @@ class History(object):
         """
         return DataSource(**self.data_source_params)
 
+    def relative_times(self):
+        times = array([state.time for state in self.states], 'd')
+        times -= times[0]
+        return times
+
 class Chain(object):
     """
     Provides the actual implementation of a Markovan  algorithm.
@@ -122,6 +122,7 @@ class Chain(object):
     def set_datasource(self, **source_params):
         """
         Sets the data source for this chain.
+
         :param source_params: A dict of parameters that implicitly specify the data source.
         """
         self.data_source = source_params
@@ -153,25 +154,27 @@ class Chain(object):
         """
         raise VirtualException()
 
+    def attach_state_metadata(self, state, iter):
+        state.iter = iter
+        state.time = time.time()
+
     def run(self):
         """
-        Actually executes the algorithm. Starting with the state retunred  by *start_state*, continues to call
-        *transition* to retrieve subsequent states of the algorithm, until *do_stop* indicates the algorithm
-        should terminate.
+        Actually executes the algorithm. Starting with the state retunred  by *start_state*, continues to call *transition* to retrieve subsequent states of the algorithm, until *do_stop* indicates the algorithm should terminate.
 
-        :return: A *History* object that contains a complete history of the state parameters at each iteration,
-        as well as any pre-computed summary statistics and visualizations as computed by *State.summarize*
+        :return: A *History* object that contains a complete history of the state parameters at each iteration, as well as any pre-computed summary statistics and visualizations as computed by *State.summarize*
         """
         if self.data_source is None:
             raise ParameterException("Data source not set when trying to run chain")
         states = []
         state = self.start_state()
         for iter in itertools.count():
-            state.iter = iter
-            state.time = time.time()
+            self.attach_state_metadata(state, iter)
             states.append(state)
             new_state = self.transition(state)
-            if self.do_stop(new_state): #todo: make last state be included
+            if self.do_stop(new_state):
+                self.attach_state_metadata(state, iter)
+                states.append(new_state)
                 break
             state = new_state
         for state in states:
@@ -211,6 +214,7 @@ class DataSource(object):
         self.params = kwargs
         self.load()
         self.split_data(test_fraction)
+        self.data = None
 
     def load(self):
         """
@@ -242,8 +246,9 @@ class DataSource(object):
     def split_data(self, test_fraction):
         """
         Splits the data into a training dataset and test dataset. Meant for internal use only.
-        :param test_fraction:
-        :return:
+
+        :param test_fraction: Fraction of data to put in the test traing set. 1-test_fraction is put into the training set.
+        :type test_fraction: float
         """
         n = self.size()
         n_test = int(test_fraction*n)
@@ -309,62 +314,10 @@ def history_cache(job_params, results=None):
     Provides read/write access to the local cache.
 
     :param job_params: A key into the cache. Typically a dict that uniquely defined a computational job.
-    :param results: If this is non-None, it is interpreted as the value associated with the key *job_params* and the
-    local cache is updated. Otherwise, this call is interpreted as a read request and the results previously stored with
-    *job_params* are returned.
+    :param results: If this is non-None, it is interpreted as the value associated with the key *job_params* and the local cache is updated. Otherwise, this call is interpreted as a read request and the results previously stored with *job_params* are returned.
     """
     if results is None: #todo: support dynamic computation of results
         raise ParameterException("Tried to access cache of unrun job")
     return results
 
 
-class DataStore(object):
-    """
-    Simple abstract data persistence interface, based around storing and retrieving
-    Python objects by a string label. Provides a dict-like interface
-    """
-    def store(self, object, key):
-        raise VirtualException()
-
-    def load(self, key):
-        raise VirtualException()
-
-    def __getitem__(self, key):
-        return self.load(key)
-
-    def __setitem__(self, key, value):
-        self.store(value, key)
-
-class LocalStore(DataStore):
-    """
-    Implements a data store using the Python *shelve* library, where the shelf is stored locally. Useful for debugging.
-    """
-    def __init__(self, filename='data/data.shelve'):
-        self.filename = filename
-        self.shelve = shelve.open(filename, writeback=True, protocol=2)
-
-    def store(self, object, key):
-        self.shelve[key] = object
-
-    def load(self, key):
-        return self.shelve[key]
-
-    def close(self):
-        self.shelve.close()
-
-class CloudStore(DataStore):
-    """
-    Implements a data store using the picloud *bucket* system. The objects must be serialiable via the *cPickle* library.
-
-    Note that picloud charges both for storage and for transmitting data, so maybe best not to store gigantic objects
-    with this system.
-    """
-    def store(self, object, key):
-        data = cPickle.dumps(object, protocol=2)
-        file_form = StringIO.StringIO(data)
-        cloud.bucket.putf(file_form, key)
-
-    def load(self, key):
-        file_form = cloud.bucket.getf(key)
-        data = file_form.read()
-        return cPickle.loads(data)

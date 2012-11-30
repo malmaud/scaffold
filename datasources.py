@@ -33,6 +33,7 @@ class Cluster:
 
         :param n: The number of points
         :param rng: The random-number generator
+        :type n: int
         :return: An *n* x *dim* array. Each row is a point; each column is a dimension.
         """
         return rng.multivariate_normal(self.mu, self.cov, size=n)
@@ -51,12 +52,10 @@ class FiniteMixture(DataSource):
          Number of points in the dataset
 
         clusters
-         A list of clusters of type Cluster_
+         A list of clusters of type Cluster
 
         weights
          A list of mixing weights for each cluster in *clusters*
-
-        :raise:
         """
         try:
             self.n_points = self.params['n_points']

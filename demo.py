@@ -2,6 +2,8 @@
 demo.py
 
 A simple, illustrative example of using the scaffold.
+Trivial case of beta-bernoulli model. There is only one unknown quantity (the true coin weight) which we do 'gibbs' sampling
+on (e.g., make iid draws from the beta posterior.) 
 """
 
 from __future__ import division
@@ -9,6 +11,9 @@ import scaffold
 from scaffold import ParameterException
 
 class CoinData(scaffold.DataSource):
+    def __init__(self, **kwargs):
+        super(CoinData, self).__init__(**kwargs)
+
     def load(self):
         self.p_heads = self.params['p_heads']
         self.n_flips = self.params['n_flips']
@@ -17,14 +22,6 @@ class CoinData(scaffold.DataSource):
 class State(scaffold.State):
     def __init__(self):
         super(State, self).__init__()
-        self.p_heads_if_biased = None
-        self.biased = None
-
-    def p_heads(self):
-        if self.biased:
-            return self.p_heads_if_biased
-        else:
-            return .5
 
 class Chain(scaffold.Chain):
     def __init__(self, **kwargs):
@@ -41,17 +38,12 @@ class Chain(scaffold.Chain):
         s = State()
         if self.start_mode=='from_prior':
             s.p_heads = self.rng.beta(self.prior_heads, self.prior_tails)
-        elif type(self.start_mode)==float:
-            s.p_heads = self.start_mode
-
-        s.biased = False
+        else:
+            s.p_heads = .5
         return s
 
     def do_stop(self, state):
-        if state.iter > self.n_iters: #todo: won't work yet
-            return True
-        else:
-            return False
+        return state.iter > self.n_iters
 
     def transition(self, prev_state):
         s = State()
