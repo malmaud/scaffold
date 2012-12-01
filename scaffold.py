@@ -12,10 +12,19 @@ import tempfile
 import itertools
 import subprocess
 from copy import deepcopy
-import util
-from util import logger
+import helpers
+#from util import memory
 from numpy import *
 from matplotlib.pyplot import *
+
+class JLogger:
+    def debug(self, str):
+        print str
+
+    def info(self, str):
+        print str
+
+logger = JLogger()
 
 class VirtualException(BaseException):
     """
@@ -42,7 +51,7 @@ class State(object):
     time
      The time (in seconds since epoch) that this state was created. Mainly used to assess runtime of algorithms.
     """
-    iter = None
+    iter = None #todo: convert these to slots
     time = None
 
     def __init__(self):
@@ -120,7 +129,7 @@ class Chain(object):
         All other keys are passed through to the derived class.
         """
         self.params = kwargs
-        self.seed = kwargs.get('seed', 0)
+        self.seed = kwargs['seed']
         self.rng = random.RandomState(self.seed)
         self.data = None
 
@@ -168,7 +177,8 @@ class Chain(object):
         state = self.start_state()
         self.attach_state_metadata(state, 0)
         for iter in itertools.count():
-            logger.debug("Chain running iteration %d" % iter)
+            if iter%50==0:
+                logger.debug("Chain running iteration %d" % iter)
             states.append(state)
             new_state = self.transition(state)
             self.attach_state_metadata(new_state, iter+1)
@@ -176,8 +186,10 @@ class Chain(object):
                 states.append(new_state)
                 break
             state = new_state
+        logger.debug("Chain complete, now summarizing states")
         for state in states:
             state.summarize()
+        logger.debug("States summarized")
         return states
 
     def summarize(self, history):
@@ -206,12 +218,13 @@ class DataSource(object):
           for the inference algorithms
 
         """
-        self.seed = kwargs.get('seed', 0)
+        self.seed = kwargs['seed']
+        logger.debug("dataset created with seed %d" % self.seed)
         self.rng = random.RandomState(self.seed)
         self.data = None
         test_fraction = kwargs.get('test_fraction', .2)
         self.params = kwargs
-        self.load()
+        self.load() #todo: load should not be called here, as per the docstring
         if self.data is None:
             raise BaseException("Datasouce 'load' method failed to create data attribute")
         self.split_data(test_fraction)
@@ -263,8 +276,6 @@ class DataSource(object):
         """
         raise VirtualException()
 
-
-
 class Experiment(object):
     """
     Encodes the parameters and results of an experiment.
@@ -289,22 +300,33 @@ class Experiment(object):
         logger.debug('Running experiment')
         ioff()
         jobs = []
+        do_cache = False
+        results = []
         for job_params in self.iter_jobs():
             method, data_src_params, method_seed, data_seed = job_params
+            chain_class = method['chain_class']
+            data_class = data_src_params['data_class']
             def f():
-                chain = method['chain_class'](seed=method_seed, **method)
-                data_source = data_src_params['data_class']()
+                logger.debug("Running job")
+                chain = chain_class(seed=method_seed, **method)
+                data_source = data_class()
                 data_source.init(seed=data_seed, **data_src_params)
                 chain.data = data_source.train_data()
                 states = chain.run()
+                logger.debug('Job chain completed')
                 history = History()
                 history.chain = chain
                 history.states = states
                 history.data_source = data_source
+                logger.debug("Summarizing chain")
                 history.summary = chain.summarize(history)
+                logger.debug("Chain summarized")
                 return history
             if self.run_mode=='local':
-                history_cache(job_params, f())
+                r = f()
+                results.append(r)
+                if do_cache:
+                    history_cache(job_params, r)
             elif self.run_mode=='cloud':
                 job_id = cloud.call(f, _env='malmaud')
                 jobs.append(job_id)
@@ -313,21 +335,21 @@ class Experiment(object):
             cloud.join(jobs)
             logger.info("Cloud jobs finished")
             for job_param, job in itertools.izip(self.iter_jobs(), jobs):
-                history_cache(job_param, cloud.result(job))
-        results = [history_cache(job_param) for job_param in self.iter_jobs()]
-        return list(self.iter_jobs()), results
+                r = cloud.result(job)
+                if do_cache:
+                    history_cache(job_param, r)
+                results.append(r)
+        self.jobs = list(self.iter_jobs())
+        self.results = results
 
-
-@util.memory.cache(ignore=['results'])
-def history_cache(job_params, results=None):
-    """
-    Provides read/write access to the local cache.
-
-    :param job_params: A key into the cache. Typically a dict that uniquely defined a computational job.
-    :param results: If this is non-None, it is interpreted as the value associated with the key *job_params* and the local cache is updated. Otherwise, this call is interpreted as a read request and the results previously stored with *job_params* are returned.
-    """
-    if results is None: #todo: support dynamic computation of results
-        raise ParameterException("Tried to access cache of unrun job")
-    return results
-
-
+#@memory.cache(ignore=['results'])
+#def history_cache(job_params, results=None):
+#    """
+#    Provides read/write access to the local cache.
+#
+#    :param job_params: A key into the cache. Typically a dict that uniquely defined a computational job.
+#    :param results: If this is non-None, it is interpreted as the value associated with the key *job_params* and the local cache is updated. Otherwise, this call is interpreted as a read request and the results previously stored with *job_params* are returned.
+#    """
+#    if results is None: #todo: support dynamic computation of results
+#        raise ParameterException("Tried to access cache of unrun job")
+#    return results

@@ -7,7 +7,7 @@ Implementation of some common procedurally-generated datasets
 from __future__ import division
 from numpy import *
 from scaffold import DataSource, ParameterException
-import util
+import helpers
 
 class Cluster:
     """
@@ -64,7 +64,7 @@ class FiniteMixture(DataSource):
         except KeyError as error:
             raise ParameterException("Required finite mixture parameter not passed in: %r" % error)
         dim = self.clusters[0].dim()
-        self.c = util.discrete_sample(self.weights, self.n_points, self.rng)
+        self.c = helpers.discrete_sample(self.weights, self.n_points, self.rng)
         self.data = empty((self.n_points, dim))
         for i, cluster in enumerate(self.clusters):
             idx = self.c==i

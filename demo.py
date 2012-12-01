@@ -10,7 +10,7 @@ Trivial case of beta-bernoulli model. There is only one unknown quantity (the tr
 from __future__ import division
 import scaffold
 from scaffold import ParameterException
-import util
+import helpers
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -26,6 +26,16 @@ class CoinData(scaffold.DataSource):
 class State(scaffold.State):
     def __init__(self):
         super(State, self).__init__()
+        self.p_heads = None
+        self.p_tails = None
+
+    def summarize(self):
+        """
+        Trivial example of a state summarize implementation.
+
+        This method caches any useful functions of the state latent variables. The purpose is to push the analysis computation onto the cloud, instead of pulling back the latent variables and working locally.
+        """
+        self.p_tails = 1 - self.p_heads
 
 class Chain(scaffold.Chain):
     def __init__(self, **kwargs):
@@ -59,32 +69,36 @@ class Chain(scaffold.Chain):
 
     def summarize(self, history):
         p_heads = [state.p_heads for state in history.states]
+
         plt.figure()
         plt.hist(p_heads, normed=True)
         plt.title('Posterior distribution on P(heads)')
         plt.xlabel('P(heads)')
         plt.ylabel('Frequency')
-        p_heads_hist = util.save_fig_to_str()
+        p_heads_hist = helpers.save_fig_to_str()
 
         plt.figure()
         plt.plot([state.iter for state in history.states], p_heads)
         plt.title('P(heads) trace')
         plt.xlabel('Iteration')
         plt.ylabel('P(heads) value')
-        p_heads_trace = util.save_fig_to_str()
+        p_heads_trace = helpers.save_fig_to_str()
 
         p_heads_mean = np.mean(p_heads)
 
         return dict(p_heads_trace=p_heads_trace, p_heads_hist=p_heads_hist, p_heads_mean=p_heads_mean)
 
-expt = scaffold.Experiment(run_mode = 'local')
+expt = scaffold.Experiment(run_mode = 'cloud')
 expt.data_srcs = [dict(data_class=CoinData, p_heads=.4, n_flips=100)]
 expt.methods = [dict(chain_class=Chain, n_iter=100, prior_heads=1, prior_tails = 1, start_mode='from_prior')]
-expt.data_seeds = [0, 1]
+expt.data_seeds = [0, 2]
 expt.method_seeds = [0, 1]
+#util.memory.clear()
 
 if __name__=="__main__":
     expt.run()
-    for job in expt.iter_jobs(): # Display the histogram of the binomial parameter for each of the four runs
-        history = scaffold.history_cache(job)
-        history.show_fig('p_heads_hist')
+    for job, history in zip(expt.jobs, expt.results): # Display the histogram of the binomial parameter for each of the four runs
+        print job
+        print history.summary['p_heads_mean']
+        print ''
+        #history.show_fig('p_heads_hist')

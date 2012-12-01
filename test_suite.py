@@ -6,6 +6,7 @@ Nose unit tests
 
 from __future__ import division
 from numpy import *
+from matplotlib.pyplot import *
 from nose.tools import assert_almost_equal
 
 def test_namespace():
@@ -34,7 +35,7 @@ def test_datasource():
     assert int(.3*n_total)==n_test
 
 def test_discrete_sample():
-    from util import discrete_sample
+    from helpers import discrete_sample
     w = asarray([3, 6, 2], 'd')
 
     def bin_samples(samples):
@@ -65,7 +66,7 @@ def test_discrete_sample():
     assert_almost_equal(w_sampled[1], r[1], delta=delta)
     assert_almost_equal(w_sampled[2], r[2], delta=delta)
 
-    samples = discrete_sample(w, 1e5, rng, temperature=.001)
+    samples = discrete_sample(w, 1e5, rng, temperature=.01)
     w_sampled = bin_samples(samples)
     r = zeros_like(w)
     r[argmax(w)] = 1
@@ -87,3 +88,13 @@ def test_data_store():
     cloud_store.store(obj_in, 'test')
     obj_out = cloud_store.load('test')
     assert obj_in==obj_out
+
+def test_remote_figures():
+    from scaffold import History
+    from helpers import save_fig_to_str
+    h = History()
+    ioff()
+    plot([1,2],[3,4])
+    s = save_fig_to_str()
+    h.summary = dict(test_figure=s)
+    h.show_fig('test_figure')

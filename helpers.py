@@ -21,7 +21,7 @@ datefmt = '%H:%M:%S')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-memory = joblib.Memory('./data', mmap_mode='r', verbose=1)
+#memory = joblib.Memory('./data', mmap_mode='r', verbose=1)
 
 def discrete_sample(w, n, rng=random, log_mode=False, temperature=None):
     """
@@ -38,7 +38,7 @@ def discrete_sample(w, n, rng=random, log_mode=False, temperature=None):
     :return: A list of *n* integers, corresponding to the indices of *w* that were chosen.
     """
     w = asarray(w, 'd')
-    softmax = temperature is not None
+    softmax = temperature is not None #todo: in softax mode, we are not robust to overflow
     seterr(over='raise', under='raise')
     if log_mode:
         if softmax:
