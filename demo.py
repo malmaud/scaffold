@@ -9,7 +9,7 @@ Trivial case of beta-bernoulli model. There is only one unknown quantity (the tr
 
 from __future__ import division
 import scaffold
-from scaffold import ParameterException
+from scaffold import ParameterException, State
 import helpers
 import matplotlib.pyplot as plt
 import numpy as np
@@ -23,23 +23,9 @@ class CoinData(scaffold.DataSource):
         self.n_flips = self.params['n_flips']
         self.data = self.rng.rand(self.n_flips)<self.p_heads
 
-class State(scaffold.State):
-    def __init__(self):
-        super(State, self).__init__()
-        self.p_heads = None
-        self.p_tails = None
-
-    def summarize(self):
-        """
-        Trivial example of a state summarize implementation.
-
-        This method caches any useful functions of the state latent variables. The purpose is to push the analysis computation onto the cloud, instead of pulling back the latent variables and working locally.
-        """
-        self.p_tails = 1 - self.p_heads
-
-class Chain(scaffold.Chain):
+class CoinChain(scaffold.Chain):
     def __init__(self, **kwargs):
-        super(Chain, self).__init__(**kwargs)
+        super(CoinChain, self).__init__(**kwargs)
         try:
             self.n_iters = self.params['n_iter']
             self.prior_heads = self.params['prior_heads']
@@ -89,16 +75,15 @@ class Chain(scaffold.Chain):
         return dict(p_heads_trace=p_heads_trace, p_heads_hist=p_heads_hist, p_heads_mean=p_heads_mean)
 
 expt = scaffold.Experiment(run_mode = 'cloud')
-expt.data_srcs = [dict(data_class=CoinData, p_heads=.4, n_flips=100)]
-expt.methods = [dict(chain_class=Chain, n_iter=100, prior_heads=1, prior_tails = 1, start_mode='from_prior')]
+expt.data_srcs = [dict(data_class='CoinData', p_heads=.4, n_flips=100)]
+expt.methods = [dict(chain_class='CoinChain', n_iter=100, prior_heads=1, prior_tails = 1, start_mode='from_prior')]
 expt.data_seeds = [0, 2]
 expt.method_seeds = [0, 1]
+expt.data_src_classes['CoinData'] = CoinData
+expt.chain_classes['CoinChain'] = CoinChain
 #util.memory.clear()
 
 if __name__=="__main__":
     expt.run()
     for job, history in zip(expt.jobs, expt.results): # Display the histogram of the binomial parameter for each of the four runs
-        print job
-        print history.summary['p_heads_mean']
-        print ''
-        #history.show_fig('p_heads_hist')
+        history.show_fig('p_heads_hist')

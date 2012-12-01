@@ -8,10 +8,11 @@ Meant for storing histories of algorithm runs, as well as any cached analysis or
 
 from __future__ import division
 import shelve
-from scaffold import VirtualException
+from helpers import VirtualException
 import cloud
 import cPickle
 import cStringIO
+import helpers
 
 class DataStore(object):
     """
@@ -39,10 +40,12 @@ class LocalStore(DataStore):
         self.shelve = shelve.open(filename, writeback=True, protocol=2)
 
     def store(self, object, key):
-        self.shelve[key] = object
+        key_str = helpers.hash_robust(key)
+        self.shelve[key_str] = object
 
     def load(self, key):
-        return self.shelve[key]
+        key_str = helpers.hash_robust(key)
+        return self.shelve[key_str]
 
     def close(self):
         self.shelve.close()
@@ -63,3 +66,4 @@ class CloudStore(DataStore):
         file_form = cloud.bucket.getf(key)
         data = file_form.read()
         return cPickle.loads(data)
+

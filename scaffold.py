@@ -14,8 +14,9 @@ import subprocess
 from copy import deepcopy
 import helpers
 #from util import memory
-from numpy import *
+from helpers import VirtualException, ParameterException
 from matplotlib.pyplot import *
+import storage
 
 class JLogger:
     def debug(self, str):
@@ -26,18 +27,7 @@ class JLogger:
 
 logger = JLogger()
 
-class VirtualException(BaseException):
-    """
-    Error raised when a method of a superclass is called directly
-    when it was  intended that a child class override that method
-    """
-    pass
 
-class ParameterException(BaseException):
-    """
-    Exception type for when an expected key is missing from the parameter dictionary of a parameterized algorithm
-    """
-    pass
 
 class State(object):
     """
@@ -82,8 +72,7 @@ class History(object):
 
     For MCMC algorithms, corresponds to the 'trace' as used in the R MCMC package.
 
-    A history includes the state of an algorithm at each iteration, as well as summary statistics that
-    have been pre-computed using the *State.summarize* method.
+    A history includes the state of an algorithm at each iteration, as well as summary statistics that have been pre-computed using the *State.summarize* method.
 
     Attributes:
 
@@ -138,7 +127,7 @@ class Chain(object):
         Implementation of the transition operator. Expected to be implemented in a user-derived subclass.
 
         :param state: The current state of the Markov algorithm
-        :raise:
+
         :return: The next state of the Markov Algorithm
         """
         raise VirtualException()
@@ -148,7 +137,7 @@ class Chain(object):
         Virtual method that decides when the iterative algorithm should terminate
 
         :param state: Current state
-        :raise:
+
         :return: *True* if the algorithm should terminate. *False* otherwise.
         """
         raise VirtualException()
@@ -156,7 +145,7 @@ class Chain(object):
     def start_state(self):
         """
         :return: The initial state of the algorithm
-        :raise:
+
         """
         raise VirtualException()
 
@@ -287,10 +276,11 @@ class Experiment(object):
         self.method_seeds = []
         self.data_seeds = []
         self.run_mode = run_mode
+        self.chain_classes = {}
+        self.data_src_classes = {}
 
     def iter_jobs(self):
-        for job_parms in \
-           itertools.product(self.methods, self.data_srcs, self.method_seeds, self.data_seeds):
+        for job_parms in itertools.product(self.methods, self.data_srcs, self.method_seeds, self.data_seeds):
             yield job_parms
 
     def run(self):
@@ -300,12 +290,13 @@ class Experiment(object):
         logger.debug('Running experiment')
         ioff()
         jobs = []
-        do_cache = False
+        do_cache = True
         results = []
+        #cache = storage.LocalStore()
         for job_params in self.iter_jobs():
             method, data_src_params, method_seed, data_seed = job_params
-            chain_class = method['chain_class']
-            data_class = data_src_params['data_class']
+            chain_class = self.chain_classes[method['chain_class']]
+            data_class = self.data_src_classes[data_src_params['data_class']]
             def f():
                 logger.debug("Running job")
                 chain = chain_class(seed=method_seed, **method)
@@ -315,9 +306,8 @@ class Experiment(object):
                 states = chain.run()
                 logger.debug('Job chain completed')
                 history = History()
-                history.chain = chain
                 history.states = states
-                history.data_source = data_source
+                history.job = job_params
                 logger.debug("Summarizing chain")
                 history.summary = chain.summarize(history)
                 logger.debug("Chain summarized")
@@ -326,7 +316,7 @@ class Experiment(object):
                 r = f()
                 results.append(r)
                 if do_cache:
-                    history_cache(job_params, r)
+                    cache[job_params] = r
             elif self.run_mode=='cloud':
                 job_id = cloud.call(f, _env='malmaud')
                 jobs.append(job_id)
@@ -338,18 +328,20 @@ class Experiment(object):
                 r = cloud.result(job)
                 if do_cache:
                     history_cache(job_param, r)
+                    #cache[job_param] = r
                 results.append(r)
         self.jobs = list(self.iter_jobs())
         self.results = results
+        #cache.close()
 
-#@memory.cache(ignore=['results'])
-#def history_cache(job_params, results=None):
-#    """
-#    Provides read/write access to the local cache.
-#
-#    :param job_params: A key into the cache. Typically a dict that uniquely defined a computational job.
-#    :param results: If this is non-None, it is interpreted as the value associated with the key *job_params* and the local cache is updated. Otherwise, this call is interpreted as a read request and the results previously stored with *job_params* are returned.
-#    """
-#    if results is None: #todo: support dynamic computation of results
-#        raise ParameterException("Tried to access cache of unrun job")
-#    return results
+@helpers.memory.cache(ignore=['results'])
+def history_cache(job_params, results=None):
+    """
+    Provides read/write access to the local cache.
+
+    :param job_params: A key into the cache. Typically a dict that uniquely defined a computational job.
+    :param results: If this is non-None, it is interpreted as the value associated with the key *job_params* and the local cache is updated. Otherwise, this call is interpreted as a read request and the results previously stored with *job_params* are returned.
+    """
+    if results is None: #todo: support dynamic computation of results
+        raise ParameterException("Tried to access cache of unrun job")
+    return results

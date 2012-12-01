@@ -15,11 +15,6 @@ def test_namespace():
     Can the key classes be created?
     """
     import scaffold
-    scaffold.State()
-    scaffold.History()
-    scaffold.Chain()
-    scaffold.DataSource()
-    scaffold.Experiment()
 
 def test_datasource():
     from datasources import FiniteMixture, Cluster
@@ -88,6 +83,9 @@ def test_data_store():
     cloud_store.store(obj_in, 'test')
     obj_out = cloud_store.load('test')
     assert obj_in==obj_out
+    unhashable = dict(name='jon', age=26)
+    local['test'] = unhashable
+    assert local['test']==unhashable
 
 def test_remote_figures():
     from scaffold import History

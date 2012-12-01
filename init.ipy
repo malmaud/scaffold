@@ -9,7 +9,7 @@ from __future__ import division
 %load_ext autoreload
 %autoreload 1
 %aimport scaffold
-%aimport util
+%aimport helpers
 %aimport datasources
 %aimport test_suite
 %aimport demo

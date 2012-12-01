@@ -10,6 +10,7 @@ from pdb import set_trace
 import logging
 import joblib
 import cStringIO
+import cPickle
 import matplotlib.pylab as plt
 
 logger = logging.getLogger('scaffold')
@@ -21,9 +22,22 @@ datefmt = '%H:%M:%S')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-#memory = joblib.Memory('./data', mmap_mode='r', verbose=1)
+memory = joblib.Memory('./data', mmap_mode='r', verbose=1)
 
-def discrete_sample(w, n, rng=random, log_mode=False, temperature=None):
+class VirtualException(BaseException):
+    """
+    Error raised when a method of a superclass is called directly
+    when it was  intended that a child class override that method
+    """
+    pass
+
+class ParameterException(BaseException):
+    """
+    Exception type for when an expected key is missing from the parameter dictionary of a parameterized algorithm
+    """
+    pass
+
+def discrete_sample(w, n=1, rng=random, log_mode=False, temperature=None):
     """
     Sample from a general  discrete distribution.
 
@@ -60,3 +74,7 @@ def save_fig_to_str():
     plt.savefig(buffer, format='pdf')
     buffer.seek(0)
     return buffer.read()
+
+def hash_robust(obj):
+    key = cPickle.dumps(obj, protocol=2)
+    return key
