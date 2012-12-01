@@ -5,5 +5,7 @@ Meant to be executed as a script from the terminal or IDE to run ad-hoc tests/de
 
 from __future__ import division
 import scaffold
+import demo
 
 
+demo.expt.run()

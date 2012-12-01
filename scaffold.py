@@ -8,9 +8,14 @@ from __future__ import division
 import cloud
 from numpy import *
 import time
+import tempfile
 import itertools
+import subprocess
 from copy import deepcopy
 import util
+from util import logger
+from numpy import *
+from matplotlib.pyplot import *
 
 class VirtualException(BaseException):
     """
@@ -85,19 +90,19 @@ class History(object):
     def __init__(self):
         self.chain = None
         self.states = []
-        self.data_source_params = None
-
-    def data_source(self):
-        """
-
-        :return: The data source that this run executed on
-        """
-        return DataSource(**self.data_source_params)
+        self.summary = []
 
     def relative_times(self):
         times = array([state.time for state in self.states], 'd')
         times -= times[0]
         return times
+
+    def show_fig(self, key):
+        fig = self.summary[key]
+        f = tempfile.NamedTemporaryFile(mode='w', suffix='.pdf', delete=False)
+        f.write(fig)
+        f.close()
+        subprocess.call(['open', f.name]) #todo: only works on OS X
 
 class Chain(object):
     """
@@ -117,15 +122,7 @@ class Chain(object):
         self.params = kwargs
         self.seed = kwargs.get('seed', 0)
         self.rng = random.RandomState(self.seed)
-        self.data_source = None
-
-    def set_datasource(self, **source_params):
-        """
-        Sets the data source for this chain.
-
-        :param source_params: A dict of parameters that implicitly specify the data source.
-        """
-        self.data_source = source_params
+        self.data = None
 
     def transition(self, state):
         """
@@ -164,26 +161,27 @@ class Chain(object):
 
         :return: A *History* object that contains a complete history of the state parameters at each iteration, as well as any pre-computed summary statistics and visualizations as computed by *State.summarize*
         """
-        if self.data_source is None:
+        logger.debug('Running chain')
+        if self.data is None:
             raise ParameterException("Data source not set when trying to run chain")
         states = []
         state = self.start_state()
+        self.attach_state_metadata(state, 0)
         for iter in itertools.count():
-            self.attach_state_metadata(state, iter)
+            logger.debug("Chain running iteration %d" % iter)
             states.append(state)
             new_state = self.transition(state)
+            self.attach_state_metadata(new_state, iter+1)
             if self.do_stop(new_state):
-                self.attach_state_metadata(state, iter)
                 states.append(new_state)
                 break
             state = new_state
         for state in states:
             state.summarize()
-        history = History()
-        history.states = states
-        history.chain = deepcopy(self)
-        history.data_source_params = self.data_source.params.copy()
-        return history #todo: implement cloud storage of history
+        return states
+
+    def summarize(self, history):
+        pass
 
 class DataSource(object):
     """
@@ -210,11 +208,13 @@ class DataSource(object):
         """
         self.seed = kwargs.get('seed', 0)
         self.rng = random.RandomState(self.seed)
+        self.data = None
         test_fraction = kwargs.get('test_fraction', .2)
         self.params = kwargs
         self.load()
+        if self.data is None:
+            raise BaseException("Datasouce 'load' method failed to create data attribute")
         self.split_data(test_fraction)
-        self.data = None
 
     def load(self):
         """
@@ -263,6 +263,8 @@ class DataSource(object):
         """
         raise VirtualException()
 
+
+
 class Experiment(object):
     """
     Encodes the parameters and results of an experiment.
@@ -284,29 +286,37 @@ class Experiment(object):
         """
         Runs the experiment, storing results in the local cache
         """
+        logger.debug('Running experiment')
+        ioff()
         jobs = []
-        job_params_list = []
         for job_params in self.iter_jobs():
             method, data_src_params, method_seed, data_seed = job_params
             def f():
                 chain = method['chain_class'](seed=method_seed, **method)
                 data_source = data_src_params['data_class']()
                 data_source.init(seed=data_seed, **data_src_params)
-                chain.set_datasource(data_source)
-                history = chain.run()
+                chain.data = data_source.train_data()
+                states = chain.run()
+                history = History()
+                history.chain = chain
+                history.states = states
+                history.data_source = data_source
+                history.summary = chain.summarize(history)
                 return history
             if self.run_mode=='local':
                 history_cache(job_params, f())
             elif self.run_mode=='cloud':
                 job_id = cloud.call(f, _env='malmaud')
                 jobs.append(job_id)
-                job_params_list.append(job_params)
         if self.run_mode=='cloud':
-            util.logging.debug("Waiting for cloud jobs to finish")
+            logger.info("Waiting for cloud jobs to finish")
             cloud.join(jobs)
-            util.logging.debug("Cloud jobs finished")
-            for job_param, job in zip(job_params_list, jobs):
+            logger.info("Cloud jobs finished")
+            for job_param, job in itertools.izip(self.iter_jobs(), jobs):
                 history_cache(job_param, cloud.result(job))
+        results = [history_cache(job_param) for job_param in self.iter_jobs()]
+        return list(self.iter_jobs()), results
+
 
 @util.memory.cache(ignore=['results'])
 def history_cache(job_params, results=None):

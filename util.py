@@ -9,6 +9,17 @@ from numpy import *
 from pdb import set_trace
 import logging
 import joblib
+import cStringIO
+import matplotlib.pylab as plt
+
+logger = logging.getLogger('scaffold')
+[logger.removeHandler(h) for h in logger.handlers]
+logger.setLevel(logging.DEBUG)
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s-%(name)s-%(levelname)s: %(message)s',
+datefmt = '%H:%M:%S')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 memory = joblib.Memory('./data', mmap_mode='r', verbose=1)
 
@@ -43,3 +54,9 @@ def discrete_sample(w, n, rng=random, log_mode=False, temperature=None):
         c /= c[-1]
         r = rng.rand(n)
         return searchsorted(c, r)
+
+def save_fig_to_str():
+    buffer = cStringIO.StringIO()
+    plt.savefig(buffer, format='pdf')
+    buffer.seek(0)
+    return buffer.read()

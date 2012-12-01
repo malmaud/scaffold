@@ -2,13 +2,17 @@
 demo.py
 
 A simple, illustrative example of using the scaffold.
-Trivial case of beta-bernoulli model. There is only one unknown quantity (the true coin weight) which we do 'gibbs' sampling
-on (e.g., make iid draws from the beta posterior.) 
+Trivial case of beta-bernoulli model. There is only one unknown quantity (the true coin weight) which we do 'gibbs' sampling on (e.g., make iid draws from the beta posterior).
+
+ In this demo, the true coin weight is .4.
 """
 
 from __future__ import division
 import scaffold
 from scaffold import ParameterException
+import util
+import matplotlib.pyplot as plt
+import numpy as np
 
 class CoinData(scaffold.DataSource):
     def __init__(self, **kwargs):
@@ -17,7 +21,7 @@ class CoinData(scaffold.DataSource):
     def load(self):
         self.p_heads = self.params['p_heads']
         self.n_flips = self.params['n_flips']
-        self.data = self.rng.rand(self.n_flips)>self.p_heads
+        self.data = self.rng.rand(self.n_flips)<self.p_heads
 
 class State(scaffold.State):
     def __init__(self):
@@ -43,16 +47,44 @@ class Chain(scaffold.Chain):
         return s
 
     def do_stop(self, state):
-        return state.iter > self.n_iters
+        return state.iter > self.n_iters #todo: off by one?
 
     def transition(self, prev_state):
         s = State()
-        coin_data = self.data()
-        n_heads = self.prior_heads + sum(coin_data.flips==True)
-        n_tails = self.prior_tails + sum(coin_data.flips==False)
+        coin_data = self.data
+        n_heads = self.prior_heads + sum(coin_data==True)
+        n_tails = self.prior_tails + sum(coin_data==False)
         s.p_heads = self.rng.beta(n_heads, n_tails)
         return s
 
+    def summarize(self, history):
+        p_heads = [state.p_heads for state in history.states]
+        plt.figure()
+        plt.hist(p_heads, normed=True)
+        plt.title('Posterior distribution on P(heads)')
+        plt.xlabel('P(heads)')
+        plt.ylabel('Frequency')
+        p_heads_hist = util.save_fig_to_str()
+
+        plt.figure()
+        plt.plot([state.iter for state in history.states], p_heads)
+        plt.title('P(heads) trace')
+        plt.xlabel('Iteration')
+        plt.ylabel('P(heads) value')
+        p_heads_trace = util.save_fig_to_str()
+
+        p_heads_mean = np.mean(p_heads)
+
+        return dict(p_heads_trace=p_heads_trace, p_heads_hist=p_heads_hist, p_heads_mean=p_heads_mean)
+
+expt = scaffold.Experiment(run_mode = 'local')
+expt.data_srcs = [dict(data_class=CoinData, p_heads=.4, n_flips=100)]
+expt.methods = [dict(chain_class=Chain, n_iter=100, prior_heads=1, prior_tails = 1, start_mode='from_prior')]
+expt.data_seeds = [0, 1]
+expt.method_seeds = [0, 1]
+
 if __name__=="__main__":
-    expt = scaffold.Experiment()
     expt.run()
+    for job in expt.iter_jobs(): # Display the histogram of the binomial parameter for each of the four runs
+        history = scaffold.history_cache(job)
+        history.show_fig('p_heads_hist')
