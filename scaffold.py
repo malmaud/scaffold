@@ -13,10 +13,8 @@ import itertools
 import subprocess
 from copy import deepcopy
 import helpers
-#from util import memory
 from helpers import VirtualException, ParameterException
 from matplotlib.pyplot import *
-import storage
 
 class JLogger:
     def debug(self, str):
@@ -249,7 +247,7 @@ class DataSource(object):
         """
         Splits the data into a training dataset and test dataset. Meant for internal use only.
 
-        :param test_fraction: Fraction of data to put in the test traing set. 1-test_fraction is put into the training set.
+        :param test_fraction: Fraction of data to put in the test training set. 1-test_fraction is put into the training set.
         :type test_fraction: float
         """
         n = self.size()
@@ -292,7 +290,6 @@ class Experiment(object):
         jobs = []
         do_cache = True
         results = []
-        #cache = storage.LocalStore()
         for job_params in self.iter_jobs():
             method, data_src_params, method_seed, data_seed = job_params
             chain_class = self.chain_classes[method['chain_class']]
@@ -316,7 +313,7 @@ class Experiment(object):
                 r = f()
                 results.append(r)
                 if do_cache:
-                    cache[job_params] = r
+                    history_cache(job_params, r)
             elif self.run_mode=='cloud':
                 job_id = cloud.call(f, _env='malmaud')
                 jobs.append(job_id)
@@ -328,11 +325,9 @@ class Experiment(object):
                 r = cloud.result(job)
                 if do_cache:
                     history_cache(job_param, r)
-                    #cache[job_param] = r
                 results.append(r)
         self.jobs = list(self.iter_jobs())
         self.results = results
-        #cache.close()
 
 @helpers.memory.cache(ignore=['results'])
 def history_cache(job_params, results=None):

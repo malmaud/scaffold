@@ -15,7 +15,7 @@ Contents:
    scaffold
    storage
    datasources
-   util
+   helpers
    demo
 
 
