@@ -12,6 +12,7 @@ import joblib
 import cStringIO
 import cPickle
 import matplotlib.pylab as plt
+import hashlib
 
 logger = logging.getLogger('scaffold')
 [logger.removeHandler(h) for h in logger.handlers]
@@ -70,11 +71,41 @@ def discrete_sample(w, n=1, rng=random, log_mode=False, temperature=None):
         return searchsorted(c, r)
 
 def save_fig_to_str():
+    """
+    Returns a string representing the current figure, in PDF format. Useful for creating a figure on a remote process and marshaling it back to the client.
+
+    Example::
+
+        plot([1,2], [3,4])
+        s = save_fig_to_str()
+        f = open('myfile.pdf', 'wb')
+        f.write(s)
+
+
+    :return: A string of bytes in PDF format.
+    """
     buffer = cStringIO.StringIO()
     plt.savefig(buffer, format='pdf')
     buffer.seek(0)
     return buffer.read()
 
 def hash_robust(obj):
-    key = cPickle.dumps(obj, protocol=2)
-    return key
+    """
+    Returns a string hash of *obj*, even if *obj* is not hashable. Mainly useful for hashing dictionaries.
+
+    :param obj: Any picklable Python object
+    :return: A printable string
+
+    Example::
+
+        x = dict(name='jon', research='AI')
+        hash(x) # Will throw an exception since dictionaries are unhashable
+        hash_robust(x) # Will work
+
+    **Warning**: It is possible for two objects to compare equal according to the == operator, and yet hash to different strings.
+
+    """
+    hash_length = 20 # The longer it is, the less likely collisions.
+    key = cPickle.dumps(obj)
+    key_hash = hashlib.sha1(key).hexdigest()
+    return key_hash[:hash_length]

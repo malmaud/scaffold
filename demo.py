@@ -14,6 +14,12 @@ import helpers
 import matplotlib.pyplot as plt
 import numpy as np
 
+class CoinState(scaffold.State):
+    __slots__ = ['p_heads', 'p_tails']
+
+    def summarize(self):
+        self.p_tails = 1-self.p_heads
+
 class CoinData(scaffold.DataSource):
     def __init__(self, **kwargs):
         super(CoinData, self).__init__(**kwargs)
@@ -35,7 +41,7 @@ class CoinChain(scaffold.Chain):
             raise ParameterException("Chain missing needed parameters")
 
     def start_state(self):
-        s = State()
+        s = CoinState()
         if self.start_mode=='from_prior':
             s.p_heads = self.rng.beta(self.prior_heads, self.prior_tails)
         else:
@@ -46,7 +52,7 @@ class CoinChain(scaffold.Chain):
         return state.iter > self.n_iters #todo: off by one?
 
     def transition(self, prev_state):
-        s = State()
+        s = CoinState()
         coin_data = self.data
         n_heads = self.prior_heads + sum(coin_data==True)
         n_tails = self.prior_tails + sum(coin_data==False)
@@ -74,16 +80,13 @@ class CoinChain(scaffold.Chain):
 
         return dict(p_heads_trace=p_heads_trace, p_heads_hist=p_heads_hist, p_heads_mean=p_heads_mean)
 
-expt = scaffold.Experiment(run_mode = 'cloud')
+expt = scaffold.Experiment(run_mode = 'local')
 expt.data_srcs = [dict(data_class='CoinData', p_heads=.4, n_flips=100)]
 expt.methods = [dict(chain_class='CoinChain', n_iter=100, prior_heads=1, prior_tails = 1, start_mode='from_prior')]
 expt.data_seeds = [0, 2]
 expt.method_seeds = [0, 1]
 expt.data_src_classes['CoinData'] = CoinData
 expt.chain_classes['CoinChain'] = CoinChain
-#util.memory.clear()
 
 if __name__=="__main__":
     expt.run()
-    for job, history in zip(expt.jobs, expt.results): # Display the histogram of the binomial parameter for each of the four runs
-        history.show_fig('p_heads_hist')
