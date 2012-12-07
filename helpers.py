@@ -1,6 +1,4 @@
 """
-util.py
-
 A set of utility functions used in various modules.
 """
 
@@ -22,8 +20,6 @@ formatter = logging.Formatter('%(asctime)s-%(name)s-%(levelname)s: %(message)s',
 datefmt = '%H:%M:%S')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
-
-memory = joblib.Memory('./data', mmap_mode='r', verbose=1)
 
 class VirtualException(BaseException):
     """

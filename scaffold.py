@@ -8,6 +8,7 @@ from __future__ import division
 import cStringIO
 import cloud
 from numpy import *
+import pandas
 from pandas import DataFrame, Index
 import time
 import tempfile
@@ -52,9 +53,7 @@ class State(object):
 
     def __init__(self):
         pass
-
-    def latents(self):
-        pass
+        #self.latents = dict()
 
     def summarize(self):
         """
@@ -68,6 +67,18 @@ class State(object):
 
     def copy(self):
         return deepcopy(self)
+
+    def get_state(self):
+        return {}
+
+    def __getstate__(self):
+        d = dict(iter=self.iter, time=self.time)
+        d.update(self.get_state())
+        return d
+
+    def __setstate__(self, state):
+        for k, v in state.iteritems():
+            setattr(self, k, v)
 
 class History(object):
     """
@@ -117,21 +128,31 @@ class History(object):
         x = empty((len(self.states), len(attr_names)))
         for i, name in enumerate(attr_names):
             x[:, i] = array([getattr(state, name) for state in self.states], 'd')
-        index = Index([state.iter for state in self.states], name='Iteration')
+        index = pandas.Index([state.iter for state in self.states], name='Iteration')
         traces = DataFrame(x, columns = attr_names, index=index)
         if collapse:
             return traces.ix[:, 0]
         else:
             return traces
 
+class ModelRegistry(object):
+    data_src_classes = {}
+    chain_classes = {}
+
+    def register_data_src(self, name, klass):
+        self.data_src_classes[name] = klass
+
+    def register_chain(self, name, klass):
+        self.chain_classes[name] = klass
+
+registry = ModelRegistry()
+
 class Chain(object):
     """
     Provides the actual implementation of a Markovan  algorithm.
     """
     def __init__(self, **kwargs):
-
         """
-
         :param kwargs: A set of parameters controlling the inference algorithm. Expected keys:
 
         seed
@@ -143,6 +164,10 @@ class Chain(object):
         self.seed = kwargs['seed']
         self.rng = random.RandomState(self.seed)
         self.data = None
+
+    @classmethod
+    def register(cls, name):
+        registry.register_chain(name, cls)
 
     def transition(self, state):
         """
@@ -215,6 +240,10 @@ class DataSource(object):
     """
     def __init__(self):
         return
+
+    @classmethod
+    def register(cls, name):
+        registry.register_data_src(name, cls)
 
     def init(self, **kwargs):
         """
@@ -291,29 +320,99 @@ class DataSource(object):
         raise VirtualException()
 
 class Job(object):
-    __slots__ = ['method', 'data_src', 'method_seed', 'data_seed']
+    method = None
+    data_src = None
+    method_seed = 0
+    data_seed = 0
+    run_mode = 'local'
 
     def __init__(self, method=None, data_src=None, method_seed=0, data_seed=0):
         self.method, self.data_src, self.method_seed, self.data_seed = \
         method, data_src, method_seed, data_seed
 
+    def get_data(self):
+        cls = registry.data_src_classes[self.data_src['data_class']]
+        data = cls()
+        data.init(seed=self.data_seed, **self.data_src)
+        return data
+
+    def get_chain(self):
+        cls = registry.chain_classes[self.method['chain_class']]
+        chain = cls(seed=self.method_seed, **self.method)
+        return chain
+
     def __getstate__(self):
-        return dict(method=self.method, data_src=self.data_src, method_seed=self.method_seed,
-        data_seed=self.data_seed)
+        return self.method, self.data_src, self.method_seed, self.data_seed
 
     def __setstate__(self, state):
-        self.method = state['method']
-        self.data_src = state['data_src']
-        self.method_seed = state['method_seed']
-        self.data_seed = state['data_seed']
+        self.method, self.data_src, self.method_seed, self.data_seed = state
 
     def __str__(self):
         s = cStringIO.StringIO()
         print >>s, "Method: %r" % self.method
         print >>s, "Data source: %r" % self.data_src
-        print >>s, "Seeds: (Method- %d, Data- %d)" % (self.method_seed, self.data_seed)
+        print >>s, "Seeds: (Method %r, Data %r)" % (self.method_seed, self.data_seed)
         return s.getvalue()
 
+    def fetch_results(self, iters=None, via_remote=False, run_mode=None):
+        if run_mode is None:
+            run_mode = self.run_mode
+        def f():
+            if run_mode=='cloud':
+                store = storage.CloudStore()
+            else:
+                store = storage.LocalStore()
+            full_history = store[self]
+            partial_history = History()
+            if iters is None:
+                partial_history.states = full_history.states
+            else:
+                partial_history.states = [state for state in full_history.states if state.iter in iters]
+            partial_history.job = self
+            partial_history.summary = full_history.summary
+            return partial_history
+        if via_remote:
+            job_id = cloud.call(f, _env="malmaud") #todo: don't hard-code environment
+            return cloud.result(job_id)
+        else:
+            return f()
+
+
+    def run(self, run_mode):
+        self.run_mode = run_mode
+        chain_class = registry.chain_classes[self.method['chain_class']]
+        data_class = registry.data_src_classes[self.data_src['data_class']]
+        use_cache = False
+        def f():
+            if run_mode == "cloud":
+                store = storage.CloudStore()
+            elif run_mode=="local":
+                store = storage.LocalStore()
+            else:
+                raise BaseException("Run mode %r not recognized" % run_mode)
+            if use_cache and (self in store):
+                return
+            logger.debug("Running job")
+            chain = chain_class(seed=self.method_seed, **self.method)
+            data_source = data_class()
+            data_source.init(seed=self.data_seed, **self.data_src)
+            chain.data = data_source.train_data()
+            ioff()
+            states = chain.run()
+            logger.debug('Job chain completed')
+            history = History()
+            history.states = states
+            history.job = self
+            logger.debug("Summarizing chain")
+            history.summary = chain.summarize(history)
+            logger.debug("Chain summarized")
+            store[history.job] = history
+            store.close()
+        if run_mode=='local':
+            return f()
+        elif run_mode=='cloud':
+            job_id = cloud.call(f, _env="malmaud")
+            return job_id
 
 class Experiment(object):
     """
@@ -326,9 +425,7 @@ class Experiment(object):
         self.method_seeds = []
         self.data_seeds = []
         self.run_mode = run_mode
-        self.chain_classes = {}
-        self.data_src_classes = {}
-        self.env = "malmaud"
+        self.results = None
 
     def iter_jobs(self):
         for job_parms in itertools.product(self.methods, self.data_srcs, self.method_seeds, self.data_seeds):
@@ -341,69 +438,20 @@ class Experiment(object):
         """
         logger.debug('Running experiment')
         cloud_job_ids = []
-        use_cache = False
-        for job in self.iter_jobs(): #todo factor this out
-            #method, data_src_params, method_seed, data_seed = job
-            chain_class = self.chain_classes[job.method['chain_class']]
-            data_class = self.data_src_classes[job.data_src['data_class']]
-            def f():
-                if self.run_mode == "cloud":
-                    store = storage.CloudStore()
-                elif self.run_mode=="local":
-                    store = storage.LocalStore()
-                else:
-                    raise BaseException("Run mode %r not recognized" % self.run_mode)
-                if use_cache and (job in store):
-                    return
-                logger.debug("Running job")
-                chain = chain_class(seed=job.method_seed, **job.method)
-                data_source = data_class()
-                data_source.init(seed=job.data_seed, **job.data_src)
-                chain.data = data_source.train_data()
-                ioff()
-                states = chain.run()
-                logger.debug('Job chain completed')
-                history = History()
-                history.states = states
-                history.job = job
-                logger.debug("Summarizing chain")
-                history.summary = chain.summarize(history)
-                logger.debug("Chain summarized")
-                store[history.job] = history
-                store.close()
-            if self.run_mode=='local':
-                f()
-            elif self.run_mode=='cloud':
-                job_id = cloud.call(f, _env=self.env)
-                cloud_job_ids.append(job_id)
+        for job in self.iter_jobs():
+            result = job.run(self.run_mode)
+            if self.run_mode == 'cloud':
+                cloud_job_ids.append(result)
         if self.run_mode=='cloud':
             logger.info("Waiting for cloud jobs to finish")
             cloud.join(cloud_job_ids)
             logger.info("Cloud jobs finished")
         self.jobs = list(self.iter_jobs())
 
-def retrieve_cloud_history(job, iters):
-    def f():
-        cloud_store = storage.CloudStore()
-        cloud_history = cloud_store[job]
-        small_history = History()
-        small_history.states = [state for state in cloud_history.states if state.iter in iters]
-        small_history.job = job
-        small_history.summary = cloud_history.summary
-        return small_history
-    job_id = cloud.call(f, _env="malmaud") #todo don't hard-core environment
-    return cloud.result(job_id)
+    def fetch_results(self):
+        self.results = []
+        for job in self.jobs:
+            self.results.append(job.fetch_results())
+        return self.results
 
 
-
-#@helpers.memory.cache(ignore=['results'])
-#def history_cache(job_params, results=None):
-#    """
-#    Provides read/write access to the local cache.
-#
-#    :param job_params: A key into the cache. Typically a dict that uniquely defined a computational job.
-#    :param results: If this is non-None, it is interpreted as the value associated with the key *job_params* and the local cache is updated. Otherwise, this call is interpreted as a read request and the results previously stored with *job_params* are returned.
-#    """
-#    if results is None: #todo: support dynamic computation of results
-#        raise ParameterException("Tried to access cache of unrun job")
-#    return results

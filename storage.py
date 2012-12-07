@@ -38,11 +38,11 @@ class LocalStore(DataStore):
     """
     Implements a data store using the Python *shelve* library, where the shelf is stored locally.
 
-    Useful for debugging.
+    Useful for debugging. Write-storage is not thread-safe.
     """
     def __init__(self, filename='data/data.shelve'):
         self.filename = filename
-        self.shelve = shelve.open(filename, writeback=False, protocol=2)
+        self.shelve = shelve.open(filename, writeback=False, protocol=-1)
 
     def store(self, object, key):
         key_str = helpers.hash_robust(key)
@@ -66,7 +66,7 @@ class CloudStore(DataStore):
     with this system.
     """
     def store(self, object, key):
-        data = cPickle.dumps(object, protocol=2)
+        data = cPickle.dumps(object, protocol=-1)
         file_form = cStringIO.StringIO(data)
         cloud.bucket.putf(file_form, hash_robust(key))
 

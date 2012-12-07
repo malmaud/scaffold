@@ -1,11 +1,8 @@
 """
-run.py
-Meant to be executed as a script from the terminal or IDE to run ad-hoc tests/demonstrations
+Meant to be executed from IPython to execute the demo
 """
 
 from __future__ import division
-import scaffold
 import demo
-
 
 demo.expt.run()

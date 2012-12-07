@@ -9,25 +9,34 @@ Trivial case of beta-bernoulli model. There is only one unknown quantity (the tr
 
 from __future__ import division
 import scaffold
-from scaffold import ParameterException, State
+from scaffold import ParameterException
 import helpers
-import matplotlib.pyplot as plt
-import numpy as np
+from matplotlib.pylab import *
 
 class CoinState(scaffold.State):
-    __slots__ = ['p_heads', 'p_tails']
+    __slots__ = ['p_heads']
 
-    def summarize(self):
-        self.p_tails = 1-self.p_heads
+    def __init__(self):
+        super(CoinState, self).__init__()
+
+    def __str__(self):
+        s = "P(heads)=%.2f" % self.p_heads
+        return s
+
+    def get_state(self):
+        return dict(p_heads=self.p_heads)
 
 class CoinData(scaffold.DataSource):
     def __init__(self, **kwargs):
         super(CoinData, self).__init__(**kwargs)
+        self.register("CoinData")
 
     def load(self):
         self.p_heads = self.params['p_heads']
         self.n_flips = self.params['n_flips']
         self.data = self.rng.rand(self.n_flips)<self.p_heads
+
+CoinData.register("CoinData")
 
 class CoinChain(scaffold.Chain):
     def __init__(self, **kwargs):
@@ -60,33 +69,37 @@ class CoinChain(scaffold.Chain):
         return s
 
     def summarize(self, history):
-        p_heads = [state.p_heads for state in history.states]
+        trace = history.get_traces('p_heads')
+        figure()
+        trace.hist()
+        posterior = helpers.save_fig_to_str()
+        return dict(posterior=posterior)
 
-        plt.figure()
-        plt.hist(p_heads, normed=True)
-        plt.title('Posterior distribution on P(heads)')
-        plt.xlabel('P(heads)')
-        plt.ylabel('Frequency')
-        p_heads_hist = helpers.save_fig_to_str()
+    def __str__(self):
+        s = []
+        s.append("Start mode: %r" % self.start_mode)
+        s.append("# of iterations: %r" % self.n_iters)
+        s.append("Beta prior: (%r, %r)" % (self.prior_heads, self.prior_tails))
+        return "\n".join(s)
 
-        plt.figure()
-        plt.plot([state.iter for state in history.states], p_heads)
-        plt.title('P(heads) trace')
-        plt.xlabel('Iteration')
-        plt.ylabel('P(heads) value')
-        p_heads_trace = helpers.save_fig_to_str()
-
-        p_heads_mean = np.mean(p_heads)
-
-        return dict(p_heads_trace=p_heads_trace, p_heads_hist=p_heads_hist, p_heads_mean=p_heads_mean)
+CoinChain.register("CoinChain")
 
 expt = scaffold.Experiment(run_mode = 'local')
-expt.data_srcs = [dict(data_class='CoinData', p_heads=.4, n_flips=100)]
-expt.methods = [dict(chain_class='CoinChain', n_iter=100, prior_heads=1, prior_tails = 1, start_mode='from_prior')]
+
+expt.data_srcs = [dict(
+    data_class='CoinData',
+    p_heads=.4,
+    n_flips=10)]
+
+expt.methods = [dict(
+    chain_class='CoinChain',
+    n_iter=100,
+    prior_heads=1,
+    prior_tails = 1,
+    start_mode='from_prior')]
+
 expt.data_seeds = [0, 2]
-expt.method_seeds = [0, 1]
-expt.data_src_classes['CoinData'] = CoinData
-expt.chain_classes['CoinChain'] = CoinChain
+expt.method_seeds = [0]
 
 if __name__=="__main__":
-    expt.run()
+    expt.run() #todo: this may not work because of pickling namespace issues
