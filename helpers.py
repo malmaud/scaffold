@@ -11,6 +11,8 @@ import cStringIO
 import cPickle
 import matplotlib.pylab as plt
 import hashlib
+import tempfile
+import subprocess
 
 logger = logging.getLogger('scaffold')
 [logger.removeHandler(h) for h in logger.handlers]
@@ -20,6 +22,7 @@ formatter = logging.Formatter('%(asctime)s-%(name)s-%(levelname)s: %(message)s',
 datefmt = '%H:%M:%S')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+
 
 class VirtualException(BaseException):
     """
@@ -85,6 +88,12 @@ def save_fig_to_str():
     buffer.seek(0)
     return buffer.read()
 
+def show_fig(fig):
+    f = tempfile.NamedTemporaryFile(mode='w', suffix='.pdf', delete=False)
+    f.write(fig)
+    f.close()
+    subprocess.call(['open', f.name]) #todo: only works on OS X
+
 def hash_robust(obj):
     """
     Returns a string hash of *obj*, even if *obj* is not hashable. Mainly useful for hashing dictionaries.
@@ -105,3 +114,4 @@ def hash_robust(obj):
     key = cPickle.dumps(obj)
     key_hash = hashlib.sha1(key).hexdigest()
     return key_hash[:hash_length]
+

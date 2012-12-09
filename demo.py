@@ -8,13 +8,14 @@ Trivial case of beta-bernoulli model. There is only one unknown quantity (the tr
 """
 
 from __future__ import division
+import pandas
 import scaffold
 from scaffold import ParameterException
 import helpers
 from matplotlib.pylab import *
 
 class CoinState(scaffold.State):
-    __slots__ = ['p_heads']
+    __slots__ = ['p_heads', 'p_tails']
 
     def __init__(self):
         super(CoinState, self).__init__()
@@ -26,10 +27,19 @@ class CoinState(scaffold.State):
     def get_state(self):
         return dict(p_heads=self.p_heads)
 
+    def summarize(self):
+        self.p_tails = 1-self.p_heads
+
+    def show(self, **kwargs):
+        s = pandas.Series([self.p_heads, self.p_tails], index=['Heads', 'Tails'])
+        s.plot(kind='bar', **kwargs)
+        ylabel('Probability')
+        yticks(arange(6)*.2)
+
+
 class CoinData(scaffold.DataSource):
     def __init__(self, **kwargs):
         super(CoinData, self).__init__(**kwargs)
-        self.register("CoinData")
 
     def load(self):
         self.p_heads = self.params['p_heads']
@@ -42,7 +52,7 @@ class CoinChain(scaffold.Chain):
     def __init__(self, **kwargs):
         super(CoinChain, self).__init__(**kwargs)
         try:
-            self.n_iters = self.params['n_iter']
+            self.n_iters = self.params['n_iters']
             self.prior_heads = self.params['prior_heads']
             self.prior_tails = self.params['prior_tails']
             self.start_mode = self.params.get('start_mode', 'from_prior')
@@ -75,6 +85,9 @@ class CoinChain(scaffold.Chain):
         posterior = helpers.save_fig_to_str()
         return dict(posterior=posterior)
 
+    def show(self, **kwargs):
+        pass
+
     def __str__(self):
         s = []
         s.append("Start mode: %r" % self.start_mode)
@@ -93,12 +106,12 @@ expt.data_srcs = [dict(
 
 expt.methods = [dict(
     chain_class='CoinChain',
-    n_iter=100,
+    n_iters=100,
     prior_heads=1,
     prior_tails = 1,
     start_mode='from_prior')]
 
-expt.data_seeds = [0, 2]
+expt.data_seeds = [0]
 expt.method_seeds = [0]
 
 if __name__=="__main__":

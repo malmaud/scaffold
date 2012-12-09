@@ -53,7 +53,6 @@ class State(object):
 
     def __init__(self):
         pass
-        #self.latents = dict()
 
     def summarize(self):
         """
@@ -80,6 +79,9 @@ class State(object):
         for k, v in state.iteritems():
             setattr(self, k, v)
 
+    def show(self, **kwargs):
+        pass
+
 class History(object):
     """
     The complete history of a single run of a particular algorithm on a particular dataset.
@@ -105,13 +107,6 @@ class History(object):
         times = array([state.time for state in self.states], 'd')
         times -= times[0]
         return times
-
-    def show_fig(self, key):
-        fig = self.summary[key]
-        f = tempfile.NamedTemporaryFile(mode='w', suffix='.pdf', delete=False)
-        f.write(fig)
-        f.close()
-        subprocess.call(['open', f.name]) #todo: only works on OS X
 
     def get_traces(self, attr_names):
         """
@@ -234,6 +229,9 @@ class Chain(object):
         """
         pass
 
+    def show(self, **kwargs):
+        pass
+
 class DataSource(object):
     """
     Represents datasets that have been procedurally generated. Intended to be inherited from by users.
@@ -324,28 +322,27 @@ class Job(object):
     data_src = None
     method_seed = 0
     data_seed = 0
-    run_mode = 'local'
 
     def __init__(self, method=None, data_src=None, method_seed=0, data_seed=0):
         self.method, self.data_src, self.method_seed, self.data_seed = \
         method, data_src, method_seed, data_seed
 
     def get_data(self):
+        """
+        :rtype: DataSource
+        """
         cls = registry.data_src_classes[self.data_src['data_class']]
         data = cls()
         data.init(seed=self.data_seed, **self.data_src)
         return data
 
     def get_chain(self):
+        """
+        :rtype : Chain
+        """
         cls = registry.chain_classes[self.method['chain_class']]
         chain = cls(seed=self.method_seed, **self.method)
         return chain
-
-    def __getstate__(self):
-        return self.method, self.data_src, self.method_seed, self.data_seed
-
-    def __setstate__(self, state):
-        self.method, self.data_src, self.method_seed, self.data_seed = state
 
     def __str__(self):
         s = cStringIO.StringIO()
@@ -354,9 +351,8 @@ class Job(object):
         print >>s, "Seeds: (Method %r, Data %r)" % (self.method_seed, self.data_seed)
         return s.getvalue()
 
-    def fetch_results(self, iters=None, via_remote=False, run_mode=None):
-        if run_mode is None:
-            run_mode = self.run_mode
+    def fetch_results(self, iters=None, via_remote=False, run_mode='local'):
+
         def f():
             if run_mode=='cloud':
                 store = storage.CloudStore()
@@ -377,11 +373,7 @@ class Job(object):
         else:
             return f()
 
-
     def run(self, run_mode):
-        self.run_mode = run_mode
-        chain_class = registry.chain_classes[self.method['chain_class']]
-        data_class = registry.data_src_classes[self.data_src['data_class']]
         use_cache = False
         def f():
             if run_mode == "cloud":
@@ -393,10 +385,9 @@ class Job(object):
             if use_cache and (self in store):
                 return
             logger.debug("Running job")
-            chain = chain_class(seed=self.method_seed, **self.method)
-            data_source = data_class()
-            data_source.init(seed=self.data_seed, **self.data_src)
-            chain.data = data_source.train_data()
+            chain = self.get_chain()
+            data = self.get_data()
+            chain.data = data.train_data()
             ioff()
             states = chain.run()
             logger.debug('Job chain completed')
