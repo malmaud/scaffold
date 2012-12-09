@@ -1,6 +1,4 @@
 """
-datasources.py
-
 Implementation of some common procedurally-generated datasets
 """
 
@@ -52,7 +50,7 @@ class FiniteMixture(DataSource):
          Number of points in the dataset
 
         clusters
-         A list of clusters of type Cluster
+         A list of clusters of type :py:class:`Cluster`
 
         weights
          A list of mixing weights for each cluster in *clusters*
@@ -71,3 +69,11 @@ class FiniteMixture(DataSource):
             n_in_cluster = int(sum(idx))
             self.data[idx] = cluster.sample_points(n_in_cluster)
 
+class EmptyData(DataSource):
+    def __init__(self, **kwargs):
+        super(EmptyData, self).__init__(**kwargs)
+
+    def load_data(self):
+        self.data = empty(0)
+
+EmptyData.register()

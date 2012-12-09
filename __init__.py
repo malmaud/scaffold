@@ -6,7 +6,7 @@ Scaffold module.
 import scaffold
 import datasources
 import helpers
-import demo
+import demo_coin
 import storage
 
 #Expose common symbols to the top level, for convenience and to keep a stable external interface in case internal package organization changes.

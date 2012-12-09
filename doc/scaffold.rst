@@ -1,8 +1,6 @@
 Scaffold module
 ================
 
-
-
 Core classes
 -------------
 
@@ -14,13 +12,11 @@ Core classes
 .. autoclass:: Chain
    :members:
 
-.. autoclass:: History
+.. autoclass:: Job
    :members:
 
-Local caching
-----------------
-
-.. autofunction:: history_cache
+.. autoclass:: History
+   :members:
 
 Exceptions
 ------------

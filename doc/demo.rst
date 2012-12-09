@@ -1,5 +1,3 @@
 Demo
 =======
 
-.. automodule:: demo
-   :members:

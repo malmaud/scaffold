@@ -15,7 +15,7 @@ import tempfile
 import subprocess
 
 logger = logging.getLogger('scaffold')
-[logger.removeHandler(h) for h in logger.handlers]
+[logger.removeHandler(h) for h in logger.handlers] #for handling module reloading
 logger.setLevel(logging.DEBUG)
 handler = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s-%(name)s-%(levelname)s: %(message)s',
@@ -85,8 +85,7 @@ def save_fig_to_str():
     """
     buffer = cStringIO.StringIO()
     plt.savefig(buffer, format='pdf')
-    buffer.seek(0)
-    return buffer.read()
+    return buffer.getvalue()
 
 def show_fig(fig):
     f = tempfile.NamedTemporaryFile(mode='w', suffix='.pdf', delete=False)
@@ -115,3 +114,8 @@ def hash_robust(obj):
     key_hash = hashlib.sha1(key).hexdigest()
     return key_hash[:hash_length]
 
+def make_array(obj):
+    if hasattr(obj, '__getitem__') and (not isinstance(obj, str)):
+        return obj, True
+    else:
+        return [obj], False

@@ -9,11 +9,8 @@ import cStringIO
 import cloud
 from numpy import *
 import pandas
-from pandas import DataFrame, Index
 import time
-import tempfile
 import itertools
-import subprocess
 from copy import deepcopy
 import helpers
 from helpers import VirtualException, ParameterException
@@ -49,10 +46,12 @@ class State(object):
      The time (in seconds since epoch) that this state was created. Mainly used to assess runtime of algorithms.
     """
 
-    __slots__ = ['iter', 'time'] #Slots are used for memory efficiency
+    __slots__ = ['iter', 'time', 'data']
+    # Slots are used for memory efficiency
+    # The 'data' slot is only used for follow-the-prior testing
 
     def __init__(self):
-        pass
+        self.iter, self.time, self.data = None, None, None
 
     def summarize(self):
         """
@@ -71,7 +70,7 @@ class State(object):
         return {}
 
     def __getstate__(self):
-        d = dict(iter=self.iter, time=self.time)
+        d = dict(iter=self.iter, time=self.time, data=self.data)
         d.update(self.get_state())
         return d
 
@@ -82,13 +81,16 @@ class State(object):
     def show(self, **kwargs):
         pass
 
+    def sample_data(self, n_data):
+        pass
+
 class History(object):
     """
     The complete history of a single run of a particular algorithm on a particular dataset.
 
     For MCMC algorithms, corresponds to the 'trace' as used in the R MCMC package.
 
-    A history includes the state of an algorithm at each iteration, as well as summary statistics that have been pre-computed using the :py:meth:`State.summarize` methods and :py:meth:`Chain.summarize` method.
+    A history includes the state of an algorithm at each iteration, as well as summary statistics and graphs that have been pre-computed using the :py:meth:`State.summarize` methods and :py:meth:`Chain.summarize` method.
 
     **Attributes**:
 
@@ -116,7 +118,8 @@ class History(object):
 
         :return: A numeric dataframe where each column corresponds to one of the variables in *attr_names* and row corresponds to one iteration. If *attr_names* is a string instead of a list, returns instead a 1d data series that is the trace of that one variable.
         """
-        collapse = False
+        attr_names, is_array = helpers.make_array(attr_names)
+        collapse = not is_array
         if isinstance(attr_names, str):
             attr_names = [attr_names]
             collapse = True
@@ -124,11 +127,17 @@ class History(object):
         for i, name in enumerate(attr_names):
             x[:, i] = array([getattr(state, name) for state in self.states], 'd')
         index = pandas.Index([state.iter for state in self.states], name='Iteration')
-        traces = DataFrame(x, columns = attr_names, index=index)
+        traces = pandas.DataFrame(x, columns = attr_names, index=index)
         if collapse:
             return traces.ix[:, 0]
         else:
             return traces
+
+    def get_chain(self):
+        return self.job.get_chain()
+
+    def get_data(self):
+        return self.job.get_data()
 
 class ModelRegistry(object):
     data_src_classes = {}
@@ -148,21 +157,29 @@ class Chain(object):
     """
     def __init__(self, **kwargs):
         """
-        :param kwargs: A set of parameters controlling the inference algorithm. Expected keys:
+        :param kwargs: A set of parameters controlling the inference algorithm. Keys:
 
-        seed
+        seed (Default 0)
          The random seed used for the iterative algorithm
+
+        follow_prior (Default *False*)
+         A boolean value indicating whether the 'observed' variables should be resampled after each iteration for debugging the transition operator, or instead should be clamped to the data vector assigned to the chain
+
+        n_data (Default 10)
+         If *follow_prior* is **True**, this is how many data points of data to train the model on. Otherwise, has no effect.
 
         All other keys are passed through to the derived class.
         """
         self.params = kwargs
-        self.seed = kwargs['seed']
+        self.seed = kwargs.get('seed', 0)
         self.rng = random.RandomState(self.seed)
         self.data = None
+        self.follow_prior = kwargs.get('follow_prior', False)
+        self.n_data = kwargs.get('n_data', 10)
 
     @classmethod
-    def register(cls, name):
-        registry.register_chain(name, cls)
+    def register(cls):
+        registry.register_chain(cls.__name__, cls)
 
     def transition(self, state):
         """
@@ -199,7 +216,7 @@ class Chain(object):
         """
         Actually executes the algorithm. Starting with the state returned  by :py:meth:`start_state`, continues to call :py:meth:`transition` to retrieve subsequent states of the algorithm, until :py:meth:`do_stop` indicates the algorithm should terminate.
 
-        :return: A list of :py:class:`State` objects, representing the state of the algorithm at the start of each iteration. Exception: The last state is the list is the state at the end of the last iteration.
+        :return: A list of :py:class:`State` objects, representing the state of the algorithm at the start of each iteration. **Exception**: The last state is the list is the state at the end of the last iteration.
         """
         logger.debug('Running chain')
         if self.data is None:
@@ -212,6 +229,8 @@ class Chain(object):
                 logger.debug("Chain running iteration %d" % iter)
             states.append(state)
             new_state = self.transition(state)
+            if self.follow_prior:
+                new_state.sample_data(self.n_data, self.rng)
             self.attach_state_metadata(new_state, iter+1)
             if self.do_stop(new_state):
                 states.append(new_state)
@@ -222,6 +241,12 @@ class Chain(object):
             state.summarize()
         logger.debug("States summarized")
         return states
+
+    def get_data(self, state):
+        if self.follow_prior:
+            return state.data
+        else:
+            return self.data
 
     def summarize(self, history):
         """
@@ -236,14 +261,12 @@ class DataSource(object):
     """
     Represents datasets that have been procedurally generated. Intended to be inherited from by users.
     """
-    def __init__(self):
-        return
 
     @classmethod
-    def register(cls, name):
-        registry.register_data_src(name, cls)
+    def register(cls):
+        registry.register_data_src(cls.__name__, cls)
 
-    def init(self, **kwargs):
+    def __init__(self, **kwargs):
         """
         Initializes the data source by setting its parameters. Note that data is not actually generated until *load*
         is called. This division is meant to allow for a client to set parameters, while the actual data is generated
@@ -260,21 +283,27 @@ class DataSource(object):
 
         """
         self.seed = kwargs['seed']
-        logger.debug("dataset created with seed %d" % self.seed)
         self.rng = random.RandomState(self.seed)
         self.data = None
-        test_fraction = kwargs.get('test_fraction', .2)
+        self.test_fraction = kwargs.get('test_fraction', .2)
         self.params = kwargs
-        self.load() #todo: load should not be called here, as per the docstring
-        if self.data is None:
-            raise BaseException("Datasouce 'load' method failed to create data attribute")
-        self.split_data(test_fraction)
+        self.loaded = False
+
+    def load_data(self):
+        raise VirtualException()
 
     def load(self):
         """
         Load/generate the data into memory
         """
-        raise VirtualException()
+        if self.loaded:
+            logger.debug("Dataset is trying to load after already being loaded")
+            return
+        self.load_data()
+        if self.data is None:
+            raise BaseException("Datasouce 'load_data' method failed to create data attribute")
+        self.split_data(self.test_fraction)
+        self.loaded = True
 
     def train_data(self):
         """
@@ -313,11 +342,15 @@ class DataSource(object):
 
     def pred_lh(self):
         """
-        E(P(test data|train data)) under procedure that generated data. Estimate of predictive entropy.
+        E(P(test data|train data)) under generative model that generated data. Estimate of predictive entropy.
         """
         raise VirtualException()
 
 class Job(object):
+    """
+    Encodes the parameters of a single run of an algorithm on a single dataset.
+    """
+
     method = None
     data_src = None
     method_seed = 0
@@ -326,14 +359,17 @@ class Job(object):
     def __init__(self, method=None, data_src=None, method_seed=0, data_seed=0):
         self.method, self.data_src, self.method_seed, self.data_seed = \
         method, data_src, method_seed, data_seed
+        self.job_id = None
+
 
     def get_data(self):
         """
         :rtype: DataSource
         """
         cls = registry.data_src_classes[self.data_src['data_class']]
-        data = cls()
-        data.init(seed=self.data_seed, **self.data_src)
+        data = cls(seed=self.data_seed, **self.data_src)
+        data.load()
+        #data.init(seed=self.data_seed, **self.data_src)
         return data
 
     def get_chain(self):
@@ -388,9 +424,10 @@ class Job(object):
             chain = self.get_chain()
             data = self.get_data()
             chain.data = data.train_data()
+            chain.data_source = data
             ioff()
             states = chain.run()
-            logger.debug('Job chain completed')
+            logger.debug('Chain completed')
             history = History()
             history.states = states
             history.job = self
@@ -403,6 +440,7 @@ class Job(object):
             return f()
         elif run_mode=='cloud':
             job_id = cloud.call(f, _env="malmaud")
+            self.job_id = job_id
             return job_id
 
 class Experiment(object):
@@ -417,6 +455,7 @@ class Experiment(object):
         self.data_seeds = []
         self.run_mode = run_mode
         self.results = None
+        self.jobs = None
 
     def iter_jobs(self):
         for job_parms in itertools.product(self.methods, self.data_srcs, self.method_seeds, self.data_seeds):
@@ -425,7 +464,7 @@ class Experiment(object):
 
     def run(self):
         """
-        Runs the experiment, storing results in the cache. If same job has already been run, will overwrite results.
+        Runs the experiment, storing results in the global cache. If same job has already been run, will overwrite results.
         """
         logger.debug('Running experiment')
         cloud_job_ids = []
@@ -445,4 +484,10 @@ class Experiment(object):
             self.results.append(job.fetch_results())
         return self.results
 
-
+    def iteritems(self):
+        if self.jobs is None:
+            return
+        if self.results is None:
+            self.fetch_results()
+        for job, result in zip(self.jobs, self.results):
+            yield (job, result)

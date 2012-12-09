@@ -12,5 +12,5 @@ from __future__ import division
 %aimport helpers
 %aimport datasources
 %aimport test_suite
-%aimport demo
+%aimport demo_coin
 %aimport storage
