@@ -114,8 +114,3 @@ def hash_robust(obj):
     key_hash = hashlib.sha1(key).hexdigest()
     return key_hash[:hash_length]
 
-def make_array(obj):
-    if hasattr(obj, '__getitem__') and (not isinstance(obj, str)):
-        return obj, True
-    else:
-        return [obj], False

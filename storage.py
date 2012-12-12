@@ -7,6 +7,7 @@ Meant for storing histories of algorithm runs, as well as any cached analysis or
 """
 
 from __future__ import division
+import os
 import shelve
 from helpers import VirtualException, hash_robust
 import cloud
@@ -65,21 +66,24 @@ class CloudStore(DataStore):
     Note that picloud charges both for storage and for transmitting data, so maybe best not to store gigantic objects
     with this system.
     """
+    def __init__(self, path='scaffold'):
+        self.path = path
+
+    def hash_key(self, key):
+        return os.path.join(self.path, hash_robust(key))
+
     def store(self, object, key):
         data = cPickle.dumps(object, protocol=-1)
         file_form = cStringIO.StringIO(data)
-        cloud.bucket.putf(file_form, hash_robust(key))
+        cloud.bucket.putf(file_form, self.hash_key(key))
 
     def load(self, key):
-        file_form = cloud.bucket.getf(hash_robust(key))
+        file_form = cloud.bucket.getf(self.hash_key(key))
         data = file_form.read()
         return cPickle.loads(data)
 
-    def __in__(self, key):
-            return hash_robust(key) in cloud.bucket.list()
-
-    def __delete__(self, key):
-        cloud.bucket.delete(key) #untested
+    def __delitem__(self, key):
+        cloud.bucket.remove(self.hash_key(key)) #untested
 
     
 

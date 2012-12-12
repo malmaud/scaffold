@@ -9,6 +9,7 @@ Trivial case of beta-bernoulli model. There is only one unknown quantity (the tr
 
 from __future__ import division
 import pandas
+from runner import Experiment
 import scaffold
 from scaffold import ParameterException
 import helpers
@@ -131,7 +132,7 @@ class CoinChain(scaffold.Chain):
 
 CoinChain.register()
 
-expt = scaffold.Experiment(run_mode = 'local')
+expt = Experiment(run_mode = 'local')
 
 expt.data_srcs = [
     dict(
@@ -157,7 +158,7 @@ method_follow_prior = dict(
     follow_prior = True)
 
 
-expt.methods = [method_from_prior]
+expt.methods = [method_follow_prior]
 
 expt.data_seeds = [0]
 expt.method_seeds = [0]
