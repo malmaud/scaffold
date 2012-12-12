@@ -93,27 +93,6 @@ def show_fig(fig):
     f.close()
     subprocess.call(['open', f.name]) #todo: only works on OS X
 
-def hash_robust(obj):
-    """
-    Returns a string hash of *obj*, even if *obj* is not hashable. Mainly useful for hashing dictionaries.
-
-    :param obj: Any picklable Python object
-    :return: A printable string
-
-    Example::
-
-        x = dict(name='jon', research='AI')
-        hash(x) # Will throw an exception since dictionaries are unhashable
-        hash_robust(x) # Will work
-
-    **Warning**: It is possible for two objects to compare equal according to the == operator, and yet hash to different strings.
-
-    """
-    hash_length = 20 # The longer it is, the less likely collisions.
-    key = cPickle.dumps(obj)
-    key_hash = hashlib.sha1(key).hexdigest()
-    return key_hash[:hash_length]
-
 class frozendict(dict):
     def get_key(self):
         return tuple((k, self[k]) for k in sorted(self.keys()))

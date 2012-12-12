@@ -125,8 +125,8 @@ class Job(object):
             history.summary = chain.summarize(history)
             logger.debug("Chain summarized")
             logger.debug("Job params: %r" % (self.params,))
-            logger.debug("Raw hash: %r" % hash(self.params))
-            logger.debug("Hash value: %r" % store.hash_key(self.params))
+            #logger.debug("Raw hash: %r" % hash(self.params))
+            #logger.debug("Hash value: %r" % store.hash_key(self.params))
             store.raw_store(self.key, history)
             #store[self.params] = history
             store.close()

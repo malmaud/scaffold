@@ -128,7 +128,7 @@ class CoinChain(scaffold.Chain):
         s.append("Beta prior: (%r, %r)" % (self.prior_heads, self.prior_tails))
         return "\n".join(s)
 
-expt = Experiment(run_mode = 'cloud')
+expt = Experiment(run_mode = 'local')
 
 expt.data_srcs = [
     dict(

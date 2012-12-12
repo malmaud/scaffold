@@ -21,6 +21,9 @@ class DataStore(object):
     Simple abstract data persistence interface, based around storing and retrieving
     Python objects by a string label. Provides a dict-like interface
     """
+    def __init__(self):
+        self.path = ''
+
     def store(self, object, key):
         raise VirtualException()
 
@@ -36,6 +39,12 @@ class DataStore(object):
     def __setitem__(self, key, value):
         self.store(value, key)
 
+    def hash_key(self, key):
+        raw_hash = hash(key)
+        s = hashlib.sha1(str(raw_hash)).hexdigest()
+        s = s[0:20]
+        return os.path.join(self.path, s)
+
 class LocalStore(DataStore):
     """
     Implements a data store using the Python *shelve* library, where the shelf is stored locally.
@@ -43,28 +52,23 @@ class LocalStore(DataStore):
     Useful for debugging. Write-storage is not thread-safe.
     """
     def __init__(self, filename='data/data.shelve'):
+        DataStore.__init__(self)
         self.filename = filename
         self.shelve = shelve.open(filename, writeback=False, protocol=-1)
 
     def store(self, object, key):
-        key_str = helpers.hash_robust(key)
+        key_str = self.hash_key(key)
         self.shelve[key_str] = object
 
-    def raw_store(self, object, key):
+    def raw_store(self, key, object):
         self.shelve[key] = object
 
-    def hash_key(self, key):
-        return key #kinda right
-
     def load(self, key):
-        key_str = helpers.hash_robust(key)
+        key_str = self.hash_key(key)
         return self.shelve[key_str]
 
     def close(self):
         self.shelve.close()
-
-    def __in__(self, key):
-        return helpers.hash_robust(key) in self.shelve.keys()
 
 class CloudStore(DataStore):
     """
@@ -74,13 +78,8 @@ class CloudStore(DataStore):
     with this system.
     """
     def __init__(self, path='scaffold'):
+        DataStore.__init__(self)
         self.path = path
-
-    def hash_key(self, key):
-        raw_hash = hash(key)
-        s = hashlib.sha1(str(raw_hash)).hexdigest()
-        s = s[0:20]
-        return os.path.join(self.path, s)
 
     def store(self, object, key):
         data = cPickle.dumps(object, protocol=-1)
