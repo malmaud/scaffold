@@ -4,7 +4,6 @@ demo.py
 A simple, illustrative example of using the scaffold.
 Trivial case of beta-bernoulli model. There is only one unknown quantity (the true coin weight) which we do 'gibbs' sampling on (e.g., make iid draws from the beta posterior).
 
- In this demo, the true coin weight is .4.
 """
 
 from __future__ import division
@@ -34,7 +33,7 @@ class CoinState(scaffold.State):
 
     def show(self, **kwargs):
         s = pandas.Series([self.p_heads, self.p_tails], index=['Heads', 'Tails'])
-        s.plot(kind='bar', **kwargs)
+        s.plot(kind='bar')
         ylabel('Probability')
         yticks(arange(6)*.2)
 
@@ -79,7 +78,6 @@ class CoinData(scaffold.DataSource):
             yticks(linspace(0, 1, 5))
         fig.subplots_adjust(hspace=1)
 
-CoinData.register()
 
 class CoinChain(scaffold.Chain):
     def __init__(self, **kwargs):
@@ -89,8 +87,8 @@ class CoinChain(scaffold.Chain):
             self.prior_heads = self.params['prior_heads']
             self.prior_tails = self.params['prior_tails']
             self.start_mode = self.params.get('start_mode', 'from_prior')
-        except KeyError:
-            raise ParameterException("Chain missing needed parameters")
+        except KeyError as err:
+            raise ParameterException("Chain missing needed parameters: %r" % err)
 
     def start_state(self):
         s = CoinState()
@@ -103,7 +101,7 @@ class CoinChain(scaffold.Chain):
         return s
 
     def do_stop(self, state):
-        return state.iter > self.n_iters #todo: off by one?
+        return state.iter > self.n_iters
 
     def transition(self, prev_state):
         s = CoinState()
@@ -130,9 +128,7 @@ class CoinChain(scaffold.Chain):
         s.append("Beta prior: (%r, %r)" % (self.prior_heads, self.prior_tails))
         return "\n".join(s)
 
-CoinChain.register()
-
-expt = Experiment(run_mode = 'local')
+expt = Experiment(run_mode = 'cloud')
 
 expt.data_srcs = [
     dict(
@@ -147,7 +143,7 @@ expt.data_srcs = [
     )
 ]
 
-expt.data_srcs = [dict(data_class="EmptyData")]
+#expt.data_srcs = [dict(data_class="EmptyData")]
 
 method_follow_prior = dict(
     chain_class='CoinChain',
@@ -157,8 +153,9 @@ method_follow_prior = dict(
     start_mode='from_prior',
     follow_prior = True)
 
+method = dict(chain_class="CoinChain", n_iters=100, prior_heads=5, prior_tails=1, start_mode='from_prior')
 
-expt.methods = [method_follow_prior]
+expt.methods = [method]
 
 expt.data_seeds = [0]
 expt.method_seeds = [0]

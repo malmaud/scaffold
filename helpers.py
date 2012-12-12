@@ -114,3 +114,11 @@ def hash_robust(obj):
     key_hash = hashlib.sha1(key).hexdigest()
     return key_hash[:hash_length]
 
+class frozendict(dict):
+    def get_key(self):
+        return tuple((k, self[k]) for k in sorted(self.keys()))
+
+    def __hash__(self):
+        return hash(self.get_key())
+
+

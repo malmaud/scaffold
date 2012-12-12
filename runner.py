@@ -10,6 +10,7 @@ from matplotlib.pyplot import ioff
 from numpy import array, empty
 import pandas
 import helpers
+from helpers import frozendict
 from scaffold import registry, logger
 import storage
 
@@ -23,19 +24,31 @@ class Job(object):
     method_seed = 0
     data_seed = 0
 
+    def get_params(self):
+        method = frozendict(self.method)
+        data_src = frozendict(self.data_src)
+        return (method, data_src, self.method_seed, self.data_seed)
+
+    params = property(get_params)
+
     def __init__(self, method=None, data_src=None, method_seed=0, data_seed=0):
         self.method, self.data_src, self.method_seed, self.data_seed = \
         method, data_src, method_seed, data_seed
         self.job_id = None
 
+    def __hash__(self):
+        return hash(self.params)
+
+    def __eq__(self, other):
+        return self.params==other.params #untested
 
     def get_data(self):
         """
         :rtype: DataSource
         """
-        cls = registry.data_src_classes[self.data_src['data_class']]
+        cls = registry[self.data_src['data_class']]
         data = cls(seed=self.data_seed, **self.data_src)
-        data.load()
+        #data.load()
         #data.init(seed=self.data_seed, **self.data_src)
         return data
 
@@ -43,7 +56,7 @@ class Job(object):
         """
         :rtype : Chain
         """
-        cls = registry.chain_classes[self.method['chain_class']]
+        cls = registry[self.method['chain_class']]
         chain = cls(seed=self.method_seed, **self.method)
         return chain
 
@@ -57,14 +70,13 @@ class Job(object):
         print >>s, "Seeds: (Method %r, Data %r)" % (self.method_seed, self.data_seed)
         return s.getvalue()
 
-    def fetch_results(self, iters=None, via_remote=False, run_mode='local'):
-
+    def fetch_results(self, iters=None, via_remote=False, run_mode='cloud'):
         def f():
             if run_mode=='cloud':
                 store = storage.CloudStore()
             else:
                 store = storage.LocalStore()
-            full_history = store[self]
+            full_history = store[self.params]
             partial_history = History()
             if iters is None:
                 partial_history.states = full_history.states
@@ -81,6 +93,13 @@ class Job(object):
 
     def run(self, run_mode):
         use_cache = False
+        chain = self.chain
+        data = self.data
+        if run_mode == 'cloud':
+            store = storage.CloudStore()
+        else:
+            store = storage.LocalStore()
+        self.key = store.hash_key(self.params)
         def f():
             if run_mode == "cloud":
                 store = storage.CloudStore()
@@ -91,8 +110,9 @@ class Job(object):
             if use_cache and (self in store):
                 return
             logger.debug("Running job")
-            chain = self.get_chain()
-            data = self.get_data()
+            #chain = self.get_chain()
+            #data = self.get_data()
+            data.load()
             chain.data = data.train_data
             chain.data_source = data
             ioff()
@@ -104,7 +124,11 @@ class Job(object):
             logger.debug("Summarizing chain")
             history.summary = chain.summarize(history)
             logger.debug("Chain summarized")
-            store[history.job] = history
+            logger.debug("Job params: %r" % (self.params,))
+            logger.debug("Raw hash: %r" % hash(self.params))
+            logger.debug("Hash value: %r" % store.hash_key(self.params))
+            store.raw_store(self.key, history)
+            #store[self.params] = history
             store.close()
         if run_mode=='local':
             return f()
@@ -149,10 +173,11 @@ class Experiment(object):
             logger.info("Cloud jobs finished")
         self.jobs = list(self.iter_jobs())
 
-    def fetch_results(self):
+    def fetch_results(self, **kwargs):
         self.results = []
+        kwargs['run_mode'] = self.run_mode
         for job in self.jobs:
-            self.results.append(job.fetch_results())
+            self.results.append(job.fetch_results(**kwargs))
         return self.results
 
     def iteritems(self):
@@ -190,7 +215,7 @@ class History(object):
         times -= times[0]
         return times
 
-    def get_traces(self, attr_names):
+    def get_traces(self, attr_names, include_time=False):
         """
         Returns traces of specific state variables in a computationally convenient form
 
@@ -198,21 +223,23 @@ class History(object):
 
         :return: A numeric dataframe where each column corresponds to one of the variables in *attr_names* and row corresponds to one iteration. If *attr_names* is a string instead of a list, returns instead a 1d data series that is the trace of that one variable.
         """
+        collapse = False
         if isinstance(attr_names, str):
             attr_names = [attr_names]
             collapse = True
+        if include_time:
+            collapse = False
         x = empty((len(self.states), len(attr_names)))
         for i, name in enumerate(attr_names):
             x[:, i] = array([getattr(state, name) for state in self.states], 'd')
         index = pandas.Index([state.iter for state in self.states], name='Iteration')
         traces = pandas.DataFrame(x, columns = attr_names, index=index)
+        if include_time:
+            traces['time'] = self.relative_times()
         if collapse:
             return traces.ix[:, 0]
         else:
             return traces
 
-    def get_chain(self):
-        return self.job.get_chain()
-
-    def get_data(self):
-        return self.job.get_data()
+    data = property(lambda self: self.job.data)
+    chain = property(lambda self: self.job.chain)

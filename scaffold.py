@@ -76,23 +76,20 @@ class State(object):
     def sample_data(self, n_data):
         pass
 
+registry = {}
 
-class ModelRegistry(object):
-    data_src_classes = {}
-    chain_classes = {}
-
-    def register_data_src(self, name, klass):
-        self.data_src_classes[name] = klass
-
-    def register_chain(self, name, klass):
-        self.chain_classes[name] = klass
-
-registry = ModelRegistry()
+class RegisteredClass(type):
+    def __init__(cls, name, bases, attrs):
+        type.__init__(cls, name, bases, attrs)
+        registry[name] = cls
 
 class Chain(object):
     """
     Provides the actual implementation of a Markovan  algorithm.
     """
+
+    __metaclass__ = RegisteredClass
+
     def __init__(self, **kwargs):
         """
         :param kwargs: A set of parameters controlling the inference algorithm. Keys:
@@ -118,10 +115,6 @@ class Chain(object):
             self.n_data = kwargs.get('n_data', 10)
         self.start_time = None
         self.end_time = None
-
-    @classmethod
-    def register(cls):
-        registry.register_chain(cls.__name__, cls)
 
     def transition(self, state):
         """
@@ -216,9 +209,7 @@ class DataSource(object):
     Represents datasets that have been procedurally generated. Intended to be inherited from by users.
     """
 
-    @classmethod
-    def register(cls):
-        registry.register_data_src(cls.__name__, cls)
+    __metaclass__ = RegisteredClass
 
     def __init__(self, **kwargs):
         """

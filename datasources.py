@@ -76,4 +76,3 @@ class EmptyData(DataSource):
     def load_data(self):
         self.data = empty(0)
 
-EmptyData.register()

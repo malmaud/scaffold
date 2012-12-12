@@ -7,6 +7,7 @@ Meant for storing histories of algorithm runs, as well as any cached analysis or
 """
 
 from __future__ import division
+import hashlib
 import os
 import shelve
 from helpers import VirtualException, hash_robust
@@ -49,6 +50,12 @@ class LocalStore(DataStore):
         key_str = helpers.hash_robust(key)
         self.shelve[key_str] = object
 
+    def raw_store(self, object, key):
+        self.shelve[key] = object
+
+    def hash_key(self, key):
+        return key #kinda right
+
     def load(self, key):
         key_str = helpers.hash_robust(key)
         return self.shelve[key_str]
@@ -70,7 +77,10 @@ class CloudStore(DataStore):
         self.path = path
 
     def hash_key(self, key):
-        return os.path.join(self.path, hash_robust(key))
+        raw_hash = hash(key)
+        s = hashlib.sha1(str(raw_hash)).hexdigest()
+        s = s[0:20]
+        return os.path.join(self.path, s)
 
     def store(self, object, key):
         data = cPickle.dumps(object, protocol=-1)
@@ -81,6 +91,11 @@ class CloudStore(DataStore):
         file_form = cloud.bucket.getf(self.hash_key(key))
         data = file_form.read()
         return cPickle.loads(data)
+
+    def raw_store(self, raw_key, object):
+        data = cPickle.dumps(object, protocol=-1)
+        file_form = cStringIO.StringIO(data)
+        cloud.bucket.putf(file_form, raw_key)
 
     def __delitem__(self, key):
         cloud.bucket.remove(self.hash_key(key)) #untested
