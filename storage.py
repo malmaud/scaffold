@@ -24,6 +24,7 @@ class DataStore(object):
     """
     def __init__(self):
         self.path = ''
+        self.auto_hash = True
 
     def store(self, object, key):
         raise VirtualException()
@@ -44,10 +45,13 @@ class DataStore(object):
         """
         Return an ASCII-encoded hash of *key*
         """
-        raw_hash = hash(key)
-        s = hashlib.sha1(str(raw_hash)).hexdigest()
-        s = s[0:20]
-        return os.path.join(self.path, s)
+        if self.auto_hash:
+            raw_hash = hash(key)
+            s = hashlib.sha1(str(raw_hash)).hexdigest()
+            s = s[0:20]
+            return os.path.join(self.path, s)
+        else:
+            return key
 
 class LocalStore(DataStore):
     """
@@ -64,9 +68,6 @@ class LocalStore(DataStore):
         key_str = self.hash_key(key)
         self.shelve[key_str] = object
 
-    def raw_store(self, key, object):
-        self.shelve[key] = object
-
     def load(self, key):
         key_str = self.hash_key(key)
         return self.shelve[key_str]
@@ -76,9 +77,6 @@ class LocalStore(DataStore):
 
     def __contains__(self, item):
         return self.hash_key(item) in self.shelve.keys()
-
-    def raw_contains(self, item):
-        return item in self.shelve.keys()
 
 class CloudStore(DataStore):
     """
@@ -101,16 +99,8 @@ class CloudStore(DataStore):
         data = file_form.read()
         return cPickle.loads(data)
 
-    def raw_store(self, raw_key, object):
-        data = cPickle.dumps(object, protocol=-1)
-        file_form = cStringIO.StringIO(data)
-        cloud.bucket.putf(file_form, raw_key)
-
     def __delitem__(self, key):
         cloud.bucket.remove(self.hash_key(key)) #untested
-
-    def raw_contains(self, item):
-        return item in cloud.bucket.list()
 
     def __contains__(self, item):
         print "checking cache"

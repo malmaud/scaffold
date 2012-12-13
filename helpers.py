@@ -100,4 +100,8 @@ class frozendict(dict):
     def __hash__(self):
         return hash(self.get_key())
 
+class circlelist(list):
+    def __getitem__(self, idx):
+        return list.__getitem__(self, idx%len(self))
+
 

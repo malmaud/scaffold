@@ -81,11 +81,13 @@ registry = {}
 class RegisteredClass(type):
     def __init__(cls, name, bases, attrs):
         type.__init__(cls, name, bases, attrs)
+        if name in registry:
+            logger.debug("Name conflict in registered class")
         registry[name] = cls
 
 class Chain(object):
     """
-    Provides the actual implementation of a Markovan  algorithm.
+    Provides the actual implementation of a Markovian  algorithm.
     """
 
     __metaclass__ = RegisteredClass
@@ -288,10 +290,14 @@ class DataSource(object):
         self.test_idx = idx[0:n_test]
         self.train_idx = idx[n_test:]
 
-    def pred_lh(self):
+    def llh_pred(self, x):
         """
-        E(P(test data|train data)) under generative model that generated data. Estimate of predictive entropy.
+        For procedural datasets, the log-likelihood of generating the data in *x* given the latent variables of the model
+        :param x:
+        :return:
         """
         raise VirtualException()
+
+
 
 

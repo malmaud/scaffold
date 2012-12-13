@@ -3,7 +3,7 @@ Implementation of some common procedurally-generated datasets
 """
 
 from __future__ import division
-from numpy import *
+from matplotlib.pylab import *
 from scaffold import DataSource, ParameterException
 import helpers
 
@@ -40,7 +40,7 @@ class FiniteMixture(DataSource):
     """
     A Gaussian finite mixture model
     """
-    def load(self):
+    def load_data(self):
         """
         Loads the latent variables and data implicitly given by the class's parameters (in *self.param*)
 
@@ -67,7 +67,16 @@ class FiniteMixture(DataSource):
         for i, cluster in enumerate(self.clusters):
             idx = self.c==i
             n_in_cluster = int(sum(idx))
-            self.data[idx] = cluster.sample_points(n_in_cluster)
+            self.data[idx] = cluster.sample_points(n_in_cluster, self.rng)
+
+    def points_in_cluster(self, c):
+        return self.data[self.c==c]
+
+    def show(self):
+        colors = helpers.circlelist(['red', 'blue', 'orange', 'green', 'yellow'])
+        for c in range(len(self.clusters)):
+            x = self.points_in_cluster(c)
+            scatter(x[:,0], x[:,1], color=colors[c])
 
 class EmptyData(DataSource):
     def __init__(self, **kwargs):
