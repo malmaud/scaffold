@@ -178,7 +178,7 @@ class Chain(object):
             if self.follow_prior:
                 new_state.sample_data(self.n_data, self.rng)
             self.attach_state_metadata(new_state, iter+1)
-            if self.do_stop(new_state):
+            if self.should_stop(new_state):
                 states.append(new_state)
                 break
             state = new_state

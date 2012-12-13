@@ -91,8 +91,7 @@ class Job(object):
         else:
             return f()
 
-    def run(self, run_mode):
-        use_cache = False
+    def run(self, run_mode='cloud', use_cache=True):
         chain = self.chain
         data = self.data
         if run_mode == 'cloud':
@@ -107,8 +106,11 @@ class Job(object):
                 store = storage.LocalStore()
             else:
                 raise BaseException("Run mode %r not recognized" % run_mode)
-            if use_cache and (self in store):
+            if use_cache and store.raw_contains(self.key):
+                logger.debug("Job already found in cache")
                 return
+            else:
+                logger.debug("Cache miss")
             logger.debug("Running job")
             #chain = self.get_chain()
             #data = self.get_data()
@@ -125,10 +127,7 @@ class Job(object):
             history.summary = chain.summarize(history)
             logger.debug("Chain summarized")
             logger.debug("Job params: %r" % (self.params,))
-            #logger.debug("Raw hash: %r" % hash(self.params))
-            #logger.debug("Hash value: %r" % store.hash_key(self.params))
             store.raw_store(self.key, history)
-            #store[self.params] = history
             store.close()
         if run_mode=='local':
             return f()
@@ -142,6 +141,8 @@ class Experiment(object):
     """
     Encodes the parameters and results of an experiment.
     An experiment is the running of difference algorithms on different datasets.
+    More precisely, it is the Cartesian product of four sets:
+    {Algorithms}*{Data source}*{Seeds for algorithm}*{Seeds for data sources}
     """
     def __init__(self, run_mode='cloud'):
         self.methods = []
@@ -157,14 +158,15 @@ class Experiment(object):
             job = Job(*job_parms)
             yield job
 
-    def run(self):
+    def run(self, **kwargs):
         """
-        Runs the experiment, storing results in the global cache. If same job has already been run, will overwrite results.
+        Runs the experiment
         """
         logger.debug('Running experiment')
         cloud_job_ids = []
+        kwargs['run_mode'] = self.run_mode
         for job in self.iter_jobs():
-            result = job.run(self.run_mode)
+            result = job.run(**kwargs)
             if self.run_mode == 'cloud':
                 cloud_job_ids.append(result)
         if self.run_mode=='cloud':

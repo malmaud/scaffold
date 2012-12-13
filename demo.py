@@ -143,8 +143,6 @@ expt.data_srcs = [
     )
 ]
 
-#expt.data_srcs = [dict(data_class="EmptyData")]
-
 method_follow_prior = dict(
     chain_class='CoinChain',
     n_iters=100,
@@ -159,3 +157,9 @@ expt.methods = [method]
 
 expt.data_seeds = [0]
 expt.method_seeds = [0]
+
+expt_prior = Experiment(run_mode='local')
+expt_prior.data_seeds = [0]
+expt_prior.method_seeds = [0]
+expt_prior.data_srcs = [dict(data_class="EmptyData")]
+expt_prior.methods = [method_follow_prior]

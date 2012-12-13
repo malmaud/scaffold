@@ -10,11 +10,12 @@ from __future__ import division
 import hashlib
 import os
 import shelve
-from helpers import VirtualException, hash_robust
+from helpers import VirtualException
 import cloud
 import cPickle
 import cStringIO
 import helpers
+from scaffold import logger
 
 class DataStore(object):
     """
@@ -40,6 +41,9 @@ class DataStore(object):
         self.store(value, key)
 
     def hash_key(self, key):
+        """
+        Return an ASCII-encoded hash of *key*
+        """
         raw_hash = hash(key)
         s = hashlib.sha1(str(raw_hash)).hexdigest()
         s = s[0:20]
@@ -70,6 +74,12 @@ class LocalStore(DataStore):
     def close(self):
         self.shelve.close()
 
+    def __contains__(self, item):
+        return self.hash_key(item) in self.shelve.keys()
+
+    def raw_contains(self, item):
+        return item in self.shelve.keys()
+
 class CloudStore(DataStore):
     """
     Implements a data store using the picloud *bucket* system. The objects must be serialiable via the *cPickle* library.
@@ -98,6 +108,16 @@ class CloudStore(DataStore):
 
     def __delitem__(self, key):
         cloud.bucket.remove(self.hash_key(key)) #untested
+
+    def raw_contains(self, item):
+        return item in cloud.bucket.list()
+
+    def __contains__(self, item):
+        print "checking cache"
+        print item
+        print self.hash_key(item)
+        logger.debug("bucket list is %r"  % cloud.bucket.list())
+        return self.hash_key(item) in cloud.bucket.list()
 
     
 
