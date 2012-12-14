@@ -6,7 +6,7 @@ from __future__ import division
 import cStringIO
 import itertools
 import cloud
-from matplotlib.pyplot import ioff
+from matplotlib.pyplot import ioff, ion
 from numpy import array, empty
 import pandas
 import helpers
@@ -83,12 +83,16 @@ class Job(object):
             if iters is None:
                 partial_history.states = full_history.states
             else:
-                partial_history.states = [state for state in full_history.states if state.iter in iters]
+                if isinstance(iters, int): #iters interpreted as stride
+                    iter_set = range(0, len(full_history.states), iters)
+                else:
+                    iter_set = iters
+                partial_history.states = [state for state in full_history.states if state.iter in iter_set]
             partial_history.job = self
             partial_history.summary = full_history.summary
             return partial_history
         if via_remote:
-            job_id = cloud.call(f, _env=picloud_env) #todo: don't hard-code environment
+            job_id = cloud.call(f, _env=picloud_env)
             return cloud.result(job_id)
         else:
             return f()
@@ -121,6 +125,7 @@ class Job(object):
             chain.data_source = data
             ioff()
             states = chain.run()
+            ion()
             logger.debug('Chain completed')
             history = History()
             history.states = states
@@ -180,6 +185,8 @@ class Experiment(object):
         self.jobs = list(self.iter_jobs())
 
     def fetch_results(self, **kwargs):
+        if self.jobs is None:
+            raise BaseException("Must run experiment before results can be fetched")
         self.results = []
         kwargs['run_mode'] = self.run_mode
         for job in self.jobs:

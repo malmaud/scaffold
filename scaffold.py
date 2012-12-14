@@ -8,7 +8,8 @@ import time
 import itertools
 from copy import deepcopy
 from numpy import *
-from helpers import VirtualException, ParameterException
+from helpers import ParameterException
+import abc
 
 
 class JLogger:
@@ -55,15 +56,12 @@ class State(object):
         """
         pass
 
-    def copy(self):
-        return deepcopy(self)
-
-    def get_state(self):
-        return {}
-
     def __getstate__(self):
         d = dict(iter=self.iter, time=self.time, data=self.data)
-        d.update(self.get_state())
+        state = {}
+        for k in self.__slots__:
+            state[k] = getattr(self, k)
+        d.update(state)
         return d
 
     def __setstate__(self, state):
@@ -78,9 +76,9 @@ class State(object):
 
 registry = {}
 
-class RegisteredClass(type):
+class RegisteredClass(abc.ABCMeta):
     def __init__(cls, name, bases, attrs):
-        type.__init__(cls, name, bases, attrs)
+        abc.ABCMeta.__init__(cls, name, bases, attrs)
         if name in registry:
             logger.debug("Name conflict in registered class")
         registry[name] = cls
@@ -114,10 +112,19 @@ class Chain(object):
         self.data = None
         self.follow_prior = kwargs.get('follow_prior', False)
         if self.follow_prior:
-            self.n_data = kwargs.get('n_data', 10)
+            self.n_data_prior = kwargs.get('n_data', 10)
         self.start_time = None
         self.end_time = None
 
+    def get_n_data(self):
+        if self.follow_prior:
+            return self.n_data_prior
+        else:
+            return len(self.data)
+
+    n_data = property(get_n_data)
+
+    @abc.abstractmethod
     def transition(self, state):
         """
         Implementation of the transition operator. Expected to be implemented in a user-derived subclass.
@@ -126,7 +133,7 @@ class Chain(object):
 
         :return: The next state of the Markov Algorithm
         """
-        raise VirtualException()
+        pass
 
     def get_net_runtime(self):
         return time.time() - self.start_time
@@ -138,6 +145,7 @@ class Chain(object):
         if self.net_runtime > self.max_runtime: return True
         return False
 
+    @abc.abstractmethod
     def do_stop(self, state):
         """
         Virtual method that decides when the iterative algorithm should terminate
@@ -146,14 +154,15 @@ class Chain(object):
 
         :return: *True* if the algorithm should terminate. *False* otherwise.
         """
-        raise VirtualException()
+        pass
 
+    @abc.abstractmethod
     def start_state(self):
         """
         :return: The initial state of the algorithm
 
         """
-        raise VirtualException()
+        pass
 
     def attach_state_metadata(self, state, iter):
         state.iter = iter
@@ -229,15 +238,17 @@ class DataSource(object):
           for the inference algorithms
 
         """
-        self.seed = kwargs['seed']
+        self.seed = kwargs.get('seed', 0)
         self.rng = random.RandomState(self.seed)
         self.data = None
         self.test_fraction = kwargs.get('test_fraction', .2)
         self.params = kwargs
         self.loaded = False
 
+
+    @abc.abstractmethod
     def load_data(self):
-        raise VirtualException()
+        pass
 
     def load(self):
         """
@@ -290,13 +301,25 @@ class DataSource(object):
         self.test_idx = idx[0:n_test]
         self.train_idx = idx[n_test:]
 
+class ProceduralDataSource(DataSource):
+    def __init__(self, **kwargs):
+        super(ProceduralDataSource, self).__init__(**kwargs)
+
+    @abc.abstractmethod
     def llh_pred(self, x):
         """
         For procedural datasets, the log-likelihood of generating the data in *x* given the latent variables of the model
         :param x:
         :return:
         """
-        raise VirtualException()
+        pass
+
+    def branch(self, seed): #untested
+        params = self.params.copy()
+        params['seed']= seed
+        new_src = type(self)(**params)
+        return new_src
+
 
 
 

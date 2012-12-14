@@ -24,18 +24,12 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
-class VirtualException(BaseException):
-    """
-    Error raised when a method of a superclass is called directly
-    when it was  intended that a child class override that method
-    """
-    pass
-
 class ParameterException(BaseException):
     """
     Exception type for when an expected key is missing from the parameter dictionary of a parameterized algorithm
     """
     pass
+
 
 def discrete_sample(w, n=1, rng=random, log_mode=False, temperature=None):
     """
@@ -69,6 +63,7 @@ def discrete_sample(w, n=1, rng=random, log_mode=False, temperature=None):
         r = rng.rand(n)
         return searchsorted(c, r)
 
+
 def save_fig_to_str():
     """
     Returns a string representing the current figure, in PDF format. Useful for creating a figure on a remote process and marshaling it back to the client.
@@ -87,11 +82,13 @@ def save_fig_to_str():
     plt.savefig(buffer, format='pdf')
     return buffer.getvalue()
 
+
 def show_fig(fig):
     f = tempfile.NamedTemporaryFile(mode='w', suffix='.pdf', delete=False)
     f.write(fig)
     f.close()
     subprocess.call(['open', f.name]) #todo: only works on OS X
+
 
 class frozendict(dict):
     def get_key(self):
@@ -99,6 +96,7 @@ class frozendict(dict):
 
     def __hash__(self):
         return hash(self.get_key())
+
 
 class circlelist(list):
     def __getitem__(self, idx):

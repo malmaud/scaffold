@@ -10,27 +10,32 @@ from __future__ import division
 import hashlib
 import os
 import shelve
-from helpers import VirtualException
 import cloud
 import cPickle
 import cStringIO
 import helpers
 from scaffold import logger
+import abc
 
 class DataStore(object):
     """
     Simple abstract data persistence interface, based around storing and retrieving
     Python objects by a string label. Provides a dict-like interface
     """
+
+    __metaclass__ = abc.ABCMeta
+
     def __init__(self):
         self.path = ''
         self.auto_hash = True
 
+    @abc.abstractmethod
     def store(self, object, key):
-        raise VirtualException()
+        pass
 
+    @abc.abstractmethod
     def load(self, key):
-        raise VirtualException()
+        pass
 
     def close(self):
         pass

@@ -25,9 +25,6 @@ class CoinState(scaffold.State):
         s = "P(heads)=%.2f" % self.p_heads
         return s
 
-    def get_state(self):
-        return dict(p_heads=self.p_heads, p_tails=self.p_tails)
-
     def summarize(self):
         self.p_tails = 1-self.p_heads # Trivial example of computing summary information on the cloud
 
