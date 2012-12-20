@@ -35,15 +35,21 @@ class Cluster:
         :type n: int
         :return: An *n* x *dim* array. Each row is a point; each column is a dimension.
         """
-        return rng.multivariate_normal(self.mu, self.cov, size=n)
+        return rng.multivariate_normal(self.mu, self.cov, size=int(n))
 
     def __hash__(self):
         return hash(str(self.mu)+str(self.cov))
 
+    def __str__(self):
+        return str(self.mu) + "," + str(self.cov)
+
+
 class FiniteMixture(ProceduralDataSource):
+
     """
     A Gaussian finite mixture model
     """
+
     def __init__(self, **kwargs):
         super(FiniteMixture, self).__init__(**kwargs)
 

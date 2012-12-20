@@ -16,6 +16,11 @@ import storage
 
 picloud_env = "malmaud"
 
+def get_chain(params, seed):
+        cls = registry[params['chain_class']]
+        chain = cls(seed=seed, **params)
+        return chain
+
 class Job(object):
     """
     Encodes the parameters of a single run of an algorithm on a single dataset.
@@ -58,9 +63,7 @@ class Job(object):
         """
         :rtype : Chain
         """
-        cls = registry[self.method['chain_class']]
-        chain = cls(seed=self.method_seed, **self.method)
-        return chain
+        return get_chain(self.method, self.method_seed)
 
     data = property(get_data)
     chain = property(get_chain)
@@ -97,15 +100,15 @@ class Job(object):
         else:
             return f()
 
-    def run(self, run_mode):
-        use_cache = False
+    def run(self, run_mode='local', use_cache=False):
         chain = self.chain
         data = self.data
         if run_mode == 'cloud':
             store = storage.CloudStore()
         else:
             store = storage.LocalStore()
-        # Calculating the key outside of the cloud is necessary since the hashing functions on the cloud may not agree with the local hashing functions (might be a 32-bit vs 64-bit python issue).
+        # Calculating the key outside of the cloud is necessary since the hashing functions on the cloud may not
+        # agree with the local hashing functions (might be a 32-bit vs 64-bit python issue).
         self.key = store.hash_key(self.params)
         def f():
             if run_mode == "cloud":
@@ -115,8 +118,10 @@ class Job(object):
             else:
                 raise BaseException("Run mode %r not recognized" % run_mode)
             store.auto_hash = False
-            if use_cache and (self in store):
+            if use_cache and (self.key in store):
+                logger.debug("Cache hit")
                 return
+            logger.debug("Cache miss")
             logger.debug("Running job")
             #chain = self.get_chain()
             #data = self.get_data()
@@ -154,12 +159,12 @@ class Experiment(object):
     More precisely, it is the Cartesian product of four sets:
     {Algorithms}*{Data source}*{Seeds for algorithm}*{Seeds for data sources}
     """
-    def __init__(self, run_mode='cloud'):
+    def __init__(self):
         self.methods = []
         self.data_srcs = []
         self.method_seeds = []
         self.data_seeds = []
-        self.run_mode = run_mode
+        self.run_mode = None
         self.results = None
         self.jobs = None
 
@@ -168,17 +173,19 @@ class Experiment(object):
             job = Job(*job_parms)
             yield job
 
-    def run(self):
+    def run(self, **kwargs):
         """
         Runs the experiment
         """
         logger.debug('Running experiment')
         cloud_job_ids = []
+        self.run_params = kwargs.copy()
+        run_mode = kwargs['run_mode']
         for job in self.iter_jobs():
-            result = job.run(self.run_mode)
-            if self.run_mode == 'cloud':
+            result = job.run(**kwargs)
+            if run_mode == 'cloud':
                 cloud_job_ids.append(result)
-        if self.run_mode=='cloud':
+        if run_mode=='cloud':
             logger.info("Waiting for cloud jobs to finish")
             cloud.join(cloud_job_ids)
             logger.info("Cloud jobs finished")
@@ -188,7 +195,7 @@ class Experiment(object):
         if self.jobs is None:
             raise BaseException("Must run experiment before results can be fetched")
         self.results = []
-        kwargs['run_mode'] = self.run_mode
+        kwargs['run_mode'] = self.run_params['run_mode']
         for job in self.jobs:
             self.results.append(job.fetch_results(**kwargs))
         return self.results
@@ -237,14 +244,17 @@ class History(object):
         :return: A numeric dataframe where each column corresponds to one of the variables in *attr_names* and row corresponds to one iteration. If *attr_names* is a string instead of a list, returns instead a 1d data series that is the trace of that one variable.
         """
         collapse = False
-        if isinstance(attr_names, str):
+        if (not hasattr(attr_names, '__getitem__')) or isinstance(attr_names, str):
             attr_names = [attr_names]
             collapse = True
         if include_time:
             collapse = False
-        x = empty((len(self.states), len(attr_names)))
+        x = empty((len(self.states), len(attr_names)), object)
         for i, name in enumerate(attr_names):
-            x[:, i] = array([getattr(state, name) for state in self.states], 'd')
+            if hasattr(name, '__call__'):
+                x[:, i] = array([name(state) for state in self.states], object)
+            else:
+                x[:, i] = array([getattr(state, name) for state in self.states], object)
         index = pandas.Index([state.iter for state in self.states], name='Iteration')
         traces = pandas.DataFrame(x, columns = attr_names, index=index)
         if include_time:

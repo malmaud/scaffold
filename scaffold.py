@@ -108,6 +108,7 @@ class Chain(object):
         self.params = kwargs
         self.seed = kwargs.get('seed', 0)
         self.max_runtime = kwargs.get('max_runtime', 60*30)
+        self.max_iters = kwargs.get('max_iters', inf)
         self.rng = random.RandomState(self.seed)
         self.data = None
         self.follow_prior = kwargs.get('follow_prior', False)
@@ -140,21 +141,25 @@ class Chain(object):
 
     net_runtime = property(get_net_runtime)
 
-    def should_stop(self, state):
-        if self.do_stop(state): return True
-        if self.net_runtime > self.max_runtime: return True
+    def _should_stop(self, state):
+        if self.do_stop(state):
+            return True
+        if self.net_runtime > self.max_runtime:
+            return True
+        if state.iter >= self.max_iters:
+            return True
         return False
 
-    @abc.abstractmethod
+
     def do_stop(self, state):
         """
-        Virtual method that decides when the iterative algorithm should terminate
+        method that decides when the iterative algorithm should terminate
 
         :param state: Current state
 
         :return: *True* if the algorithm should terminate. *False* otherwise.
         """
-        pass
+        return False
 
     @abc.abstractmethod
     def start_state(self):
@@ -167,6 +172,9 @@ class Chain(object):
     def attach_state_metadata(self, state, iter):
         state.iter = iter
         state.time = time.time()
+
+    def sample_data(self, state):
+        pass
 
     def run(self):
         """
@@ -181,15 +189,18 @@ class Chain(object):
         self.start_time = time.time()
         state = self.start_state()
         self.attach_state_metadata(state, 0)
+        if self.follow_prior:
+            self.sample_data(state)
         for iter in itertools.count():
             if iter%50==0:
                 logger.debug("Chain running iteration %d" % iter)
             states.append(state)
             new_state = self.transition(state)
             if self.follow_prior:
-                new_state.sample_data(self.n_data, self.rng)
+                self.sample_data(new_state)
+                #new_state.sample_data(self.n_data, self.rng)
             self.attach_state_metadata(new_state, iter+1)
-            if self.should_stop(new_state):
+            if self._should_stop(new_state):
                 states.append(new_state)
                 break
             state = new_state

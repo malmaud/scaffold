@@ -54,14 +54,18 @@ def discrete_sample(w, n=1, rng=random, log_mode=False, temperature=None):
         c = logaddexp.accumulate(w)
         c -= c[-1]
         r = log(rng.rand(n))
-        return searchsorted(c, r)
+        value = searchsorted(c, r)
     else:
         if softmax:
             w = exp(w/temperature)
         c = cumsum(w)
         c /= c[-1]
         r = rng.rand(n)
-        return searchsorted(c, r)
+        value = searchsorted(c, r)
+    if n==1:
+        return value[0]
+    else:
+        return value
 
 
 def save_fig_to_str():

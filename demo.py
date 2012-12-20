@@ -125,7 +125,7 @@ class CoinChain(scaffold.Chain):
         s.append("Beta prior: (%r, %r)" % (self.prior_heads, self.prior_tails))
         return "\n".join(s)
 
-expt = Experiment(run_mode = 'local')
+expt = Experiment()
 
 expt.data_srcs = [
     dict(
@@ -155,7 +155,7 @@ expt.methods = [method]
 expt.data_seeds = [0]
 expt.method_seeds = [0]
 
-expt_prior = Experiment(run_mode='local')
+expt_prior = Experiment()
 expt_prior.data_seeds = [0]
 expt_prior.method_seeds = [0]
 expt_prior.data_srcs = [dict(data_class="EmptyData")]
