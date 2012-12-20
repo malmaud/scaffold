@@ -3,6 +3,8 @@ Scaffold
 
 A Python scaffold for running experiments on iterative stochastic algorithms.
 
-[Planned] features:
-
+Features:
 * Run experiments remotely, via picloud
+* ...others...
+
+To see documentation, cd to the doc directory and execute 'make html' on the command line. Then open doc/_build/html/index.html in a web browser. Note documentation is a few revisions beind at the moment. 
