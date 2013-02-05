@@ -40,6 +40,7 @@ def discrete_sample(w, n=1, rng=random, log_mode=False, flatten=True):
     :param  n: The number of samples to return.
     :param rng: The random number generator to use (e.g. as returned by *random.RandomState*)
     :param log_mode: If *True*, interpret *w* as the log of the true weights. If *False*, interpret *w* as the literal weights. Default *False*.
+    :param flatten: If *True* and n=1, returns a scalar instead of an array. Default *True*.
 
 
     :return: A list of *n* integers, corresponding to the indices of *w* that were chosen.
@@ -88,6 +89,9 @@ def show_fig(fig):
 
 
 class frozendict(dict):
+    """
+    A hashable dictionary which can be used as the key to other dictionaries
+    """
     def get_key(self):
         return tuple((k, self[k]) for k in sorted(self.keys()))
 
@@ -96,12 +100,23 @@ class frozendict(dict):
 
 
 class circlelist(list):
+    """
+    A list with modular arithmetic indexing semantics.
+
+    Example::
+
+       l = circlelist([1, 2, 3])
+       print l[10]
+
+    will print l[10%3]=2
+    """
     def __getitem__(self, idx):
         return list.__getitem__(self, idx % len(self))
 
 def estimate_mcmc_var(g, bin_size=10):
     """
     Estimate the variance of a population parameter, given autocorrelated samples of the parameter
+
     :param g: Numpy 1d array
     :return: Scalar variance estimate
     """
@@ -119,6 +134,7 @@ def estimate_mcmc_var(g, bin_size=10):
 def qq_plot(s1, s2):
     """
     Produce a quantile-quantile plot
+
     :param s1: A one-dimensional series
     :param s2: A one-dimensional series
     :return:

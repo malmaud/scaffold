@@ -1,6 +1,11 @@
 Runner module
 ==================
 
+Introduction
+--------------
+
+Contains classes related to running a stochastic algorithm and managing the results.
+
 Core classes
 ---------------
 

@@ -14,7 +14,7 @@ from helpers import frozendict
 from scaffold import registry, logger
 import storage
 
-picloud_env = "malmaud"
+picloud_env = "malmaud" #todo: this should configurable somewhere
 
 
 def get_chain(params, seed):
@@ -25,7 +25,7 @@ def get_chain(params, seed):
 
 class Job(object):
     """
-    Encodes the parameters of a single run of an algorithm on a single dataset.
+    Represent a single run of an algorithm on a given dataset, for fixed seeds.
     """
 
     method = None
@@ -53,7 +53,6 @@ class Job(object):
 
     def get_data(self):
         """
-        :rtype: DataSource
         """
         cls = registry[self.data_src['data_class']]
         data = cls(seed=self.data_seed, **self.data_src)
@@ -62,7 +61,6 @@ class Job(object):
 
     def get_chain(self):
         """
-        :rtype : Chain
         """
         return get_chain(self.method, self.method_seed)
 
@@ -76,7 +74,16 @@ class Job(object):
         print >> s, "Seeds: (Method %r, Data %r)" % (self.method_seed, self.data_seed)
         return s.getvalue()
 
-    def fetch_results(self, iters=None, via_remote=False, run_mode='cloud'):
+    def fetch_results(self, iters=None, via_remote=True, run_mode='cloud'):
+        """
+        Returns the result of the job that has already been run as a :py:class:`History` object. Typically you would call :py:meth:`run` first, then call :py:meth:`fetch_results` to get the resutlts. The method has various methods to control how much of the job is returned, to avoid excessive memory usage and data transfer between the cloud and local machine.
+
+        :param iters: If *iters* is an iterable, returns only the iterations of the chain in *iters*. If *iters* is a scalar, return every *iters* state (the stride). If None, returns all states.
+        :param via_remote: If *True*, executes the state filtering on the cloud before transferring the data to the local machine. If false, filter the state on the local machine.
+        :param run_mode: Controls whether to search for the results on the local macine or on the cloud. Can be *local* or *cloud*.
+        :return:
+        """
+
         def f():
             if run_mode == 'cloud':
                 store = storage.CloudStore()
@@ -103,6 +110,22 @@ class Job(object):
             return f()
 
     def run(self, run_mode='local', use_cache=False):
+        """
+        Runs the job, storing all the states of the Markov chain in a datastore.
+
+        :param run_mode: A string that controls how and where the job is run. Currently has two allowable values:
+
+         local
+          Runs the job locally and stores the data locally. Useful for debugging.
+
+         cloud
+           Runs the job on picloud and stores the data in a picloud bucket.
+
+
+        :param use_cache: If *True* and this job has already been run at a previous time, return the results of that job. If *False*, rerun the job.
+        :return: If run_mode is 'cloud', returns the picloud job id in a non-blocking way. If run_mode is 'local', does not return anything and will not return until the job is completed.
+        :raise:
+        """
         chain = self.chain
         data = self.data
         if run_mode == 'cloud':
@@ -175,7 +198,7 @@ class Experiment(object):
 
     def run(self, **kwargs):
         """
-        Runs the experiment
+        Runs the experiment. If the experiment is run on the cloud, blocks until all jobs complete.
         """
         logger.debug('Running experiment')
         cloud_job_ids = []

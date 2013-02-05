@@ -1,6 +1,10 @@
 Scaffold module
 ================
 
+Introduction
+--------------
+
+The scaffold module contains the classes needed for specifying a stochastic Markov chain. You will derve  from these classes to specify your algorithm.
 
 Core classes
 -------------
