@@ -49,6 +49,9 @@ class State(object):
 
     time
      The time (in seconds since epoch) that this state was created. Mainly used to assess runtime of algorithms.
+
+    data
+      A numpy array of the data associated with the state. Only used for Geweke testing, when the data is different on each iteration. In other cases, data is stored only once in the :py:class:`Chain` object.
     """
 
     __slots__ = ['iter', 'time', 'data']
@@ -104,6 +107,11 @@ GewekeTest = namedtuple('GewekeTest', ['p', 'z', 'cs', 'mc', 'g'])
 
 
 def plot_test(results):
+    """
+    Plots the results of a Geweke test.
+    :param results: The geweke test results, as returned by :py:meth:`Chain.geweke_test`.
+    :raise:
+    """
     if True:
     #if isinstance(results, GewekeTest):
         g = results.g
@@ -124,7 +132,15 @@ def plot_test(results):
 
 class Chain(object):
     """
-    Provides the actual implementation of a Markovian  algorithm.
+    Provides the actual implementation of a Markovian  algorithm. When you subclass this, you should at least implement
+    *transition* and *start_state*. You can optionally also implement *sample_data* and *sample_latent* to enable
+    Geweke testing. You can optionally implement *do_stop* to implement a custom stopping rule.
+
+     Each of the methods you override takes an argument calls *params*. This stands for 'parameters' and is a Python dictionary containing the
+     parameters you passed to the Experiment object. They also take a method called *rng*. This is a numpy random number generator object,
+     created based on the method seed of the experiment. When generating random values, you should only use the *rng* object. This guarentees your experiments will be reproducible.
+
+     Some of the methods take a *data_params* object. This object contains the number of datapoints and the dimensionality of the data the chain is being run (in the 'n' key and 'dim' key, respectively).
     """
 
     __metaclass__ = RegisteredClass
@@ -136,15 +152,13 @@ class Chain(object):
         seed (Default 0)
          The random seed used for the iterative algorithm
 
-        follow_prior (Default *False*)
-         A boolean value indicating whether the 'observed' variables should be resampled after each iteration
-         for debugging the transition operator, or instead should be clamped to the data vector assigned to the chain
+        max_runtime (Default 1800 seconds)
+         The maximum amount of time the algorithm will be allowed to run before being terminated (in seconds)
 
-        n_data (Default 10)
-         If *follow_prior* is **True**, this is how many data points of data to train the model on.
-          Otherwise, has no effect.
+        max_iters (Default 1000)
+         The maximum number of iterations the algorithm will be allowed to run before being terminated.
 
-        All other keys are passed through to the derived class.
+        All other keys are passed as the *params* argument to the derived class.
         """
         self.params = kwargs
         self.seed = kwargs.get('seed', 0)
@@ -163,6 +177,12 @@ class Chain(object):
         Implementation of the transition operator. Expected to be implemented in a user-derived subclass.
 
         :param state: The current state of the Markov algorithm
+
+        :param params: A dict of the parameters of the chain
+
+        :param data: A numpy array representing the data
+
+        :param rng: The random number generator object
 
         :return: The next state of the Markov Algorithm
         """
@@ -194,12 +214,16 @@ class Chain(object):
         return False
 
     @abc.abstractmethod
-    def start_state(self, params, data, rng):
+    def start_state(self, params, data_params, rng):
         """
+        User-defined method that is expected to return the starting state of the algorithm.
+
+        :param params: A dict of the parameters of the chain
+        :param data_params: A dict describing the shape of the data. Typically includes *n*, the number of data points, and *dim*, the dimensionality of the data.
+        :param rng: The random number generator
+
         :return: The initial state of the algorithm
-
         """
-
         pass
 
     def _attach_state_metadata(self, state, iter):
@@ -207,12 +231,38 @@ class Chain(object):
         state.time = time.time()
 
     def sample_data(self, state, params, data_params, rng):
+        """
+        User-defined method that is meant to resample the 'data' the chain is being trained on, as a function of the
+        latent state. Useful for testing.
+
+        :param state: The latent state of the Markov chain
+        :param params: A dict of the parameters of the chain
+        :param data_params: A dict describing the shape of the data to be returned. Typically includes *n*, the number of data points, and *dim*, the dimensionality of the data
+        :param rng: Random number generator object
+        :return: A numpy array of the data
+        """
+
         logger.debug('Resampling data method not implemented')
 
     def sample_latent(self, params, data_params, rng):
+        """
+        User defined method that is meant to sample the latent state of the Markov chain from the prior. Useful for
+        testing.
+
+        :param params: A dict of the parameters of the chain.
+        :param data_params: A dict of the shape of the data.
+        :param rng: The random number generator object
+        :return: A :py:class:`State`-derived object that contains a sample from the latent state.
+        """
         pass
 
     def sample_state(self, data_params):
+        """
+        Returns a sample from the prior.
+
+        :param data_params: A dict of the shape of the data to be returned
+        :return:
+        """
         s = self.sample_latent(self.params, data_params, self.rng)
         s.data = self.sample_data(s, self.params, data_params, self.rng)
         return s
@@ -253,6 +303,13 @@ class Chain(object):
 
 
     def geweke_test(self, M, data_params, g_funcs):
+        """
+        Runs a Geweke test for a specified set of test functions.
+        :param M: Number of iterations of the chain to run. Larger values will result in a more accurate test.
+        :param data_params: The shape of the data to train on
+        :param g_funcs: A list of test functions. Each function is expected to take in a state, and return a scalar value.
+        :return: A :py:class:`GewekeTest` object containing a full description of the results of the test.
+        """
         mc_sim = []
         for i in range(M):
             state = self.sample_state(data_params)
@@ -260,8 +317,8 @@ class Chain(object):
         cs_sim = []
         theta = self.start_state(self.params, data_params, self.rng)
         for i in range(M):
-            if i%100==0:
-                logger.debug("Iteration %d"  % i)
+            if i % 100 == 0:
+                logger.debug("Iteration %d" % i)
             y = self.sample_data(theta, self.params, data_params, self.rng)
             theta = self.transition(theta, self.params, y, self.rng)
             theta.data = y
@@ -276,7 +333,7 @@ class Chain(object):
                 g_vals[i, m, 1] = g_funcs[i](cs_sim[m])
             g_mean_mc = mean(g_vals[i, :, 0])
             g_mean_cs = mean(g_vals[i, :, 1])
-            g_var_mc = var(g_vals[i, :, 0])/M
+            g_var_mc = var(g_vals[i, :, 0]) / M
             g_var_cs = helpers.estimate_mcmc_var(g_vals[i, :, 1])
             z[i] = (g_mean_mc - g_mean_cs) / sqrt((g_var_mc + g_var_cs))
             p[i] = 2 * stats.norm(0, 1).cdf(-abs(z[i]))
@@ -284,10 +341,10 @@ class Chain(object):
 
 
     def get_data(self, state):
-        if self.follow_prior:
-            return state.data
-        else:
-            return self.data
+        """
+        Returns the data the chain was trained on.
+        """
+        return self.data
 
     def summarize(self, history):
         """
@@ -295,13 +352,12 @@ class Chain(object):
         """
         pass
 
-    def show(self, **kwargs):
-        pass
-
 
 class DataSource(object):
     """
     Represents datasets that have been procedurally generated. Intended to be inherited from by users.
+
+    Specifically, the *load* method needs to be implemented by the end user.
     """
 
     __metaclass__ = RegisteredClass
@@ -332,7 +388,11 @@ class DataSource(object):
 
     @abc.abstractmethod
     def load(self, params, rng):
-        # expected to set self.data to a numpy array
+        """
+        Loads the data into memory.
+        :param params: A python dict containing the parameters of the data source, as given to the Experiment object.
+        :param rng: Random number generator to be used for generating synthetic datasets.
+        """
         pass
 
     def _load_data(self):
@@ -342,7 +402,7 @@ class DataSource(object):
         if self.loaded:
             logger.debug("Dataset is trying to load after already being loaded")
             return
-        self.load(self.params, self.rng)
+        self.data = self.load(self.params, self.rng)
         if self.data is None:
             raise BaseException("Datasouce 'load_data' method failed to create data attribute")
         self._split_data(self.test_fraction)
@@ -400,7 +460,12 @@ class ProceduralDataSource(DataSource):
         pass
 
     def branch(self, seed):
-        #todo: test
+        """
+        Returns a new data source that has the same parameters as the current datasource, but a new seed. Useful for
+        creating many synthetic datasets that have the distribution.
+        :param seed:
+        :return:
+        """
         params = self.params.copy()
         params['seed'] = seed
         new_src = type(self)(**params)

@@ -1,6 +1,7 @@
 Scaffold module
 ================
 
+
 Core classes
 -------------
 
@@ -12,16 +13,5 @@ Core classes
 .. autoclass:: Chain
    :members:
 
-.. autoclass:: Job
+.. autoclass:: DataSource
    :members:
-
-.. autoclass:: History
-   :members:
-
-Exceptions
-------------
-
-.. autoexception:: VirtualException
-.. autoexception:: ParameterException
-
-

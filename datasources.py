@@ -51,7 +51,7 @@ class GaussianCluster:
 
 class FiniteMixture(ProceduralDataSource):
     """
-    A Gaussian finite mixture model
+    Implements a finite mixture model.
     """
 
     def __init__(self, **kwargs):
@@ -81,11 +81,12 @@ class FiniteMixture(ProceduralDataSource):
             raise ParameterException("Required finite mixture parameter not passed in: %r" % error)
         dim = clusters[0].dim
         self.c = helpers.discrete_sample(weights, n_points, rng)
-        self.data = empty((n_points, dim))
+        data = empty((n_points, dim))
         for i, cluster in enumerate(clusters):
             idx = self.c == i
             n_in_cluster = int(sum(idx))
-            self.data[idx] = cluster.sample_points(n_in_cluster, rng)
+            data[idx] = cluster.sample_points(n_in_cluster, rng)
+        return data
 
     def points_in_cluster(self, c):
         return self.data[self.c == c]
@@ -116,6 +117,11 @@ class EmptyData(ProceduralDataSource):
 
 
 class BinomialCluster:
+    """
+    A cluster of binary data. Each dimension has a separate probability of being True.
+
+     Parameterized by a vector 'p', where p[d] is the probability that the 'd' coordinate is true.
+    """
     def __init__(self, p=None):
         self.p = asarray(p, float)
 

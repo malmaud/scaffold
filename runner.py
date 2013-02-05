@@ -126,8 +126,6 @@ class Job(object):
                 return
             logger.debug("Cache miss")
             logger.debug("Running job")
-            #chain = self.get_chain()
-            #data = self.get_data()
             data._load_data()
             chain.data = data.train_data
             chain.data_source = data
@@ -242,13 +240,11 @@ class History(object):
 
     def get_traces(self, attr_names, include_time=False):
         """
-        Returns traces of specific state variables in a computationally convenient form
+        Returns traces of specific state variables in a computationally convenient form.
 
         :param attr_names: A list of names of names to return traces for, or a string identifying a single variable.
 
-        :return: A numeric dataframe where each column corresponds to one of the variables in *attr_names* and
-        row corresponds to one iteration. If *attr_names* is a string instead of a list,
-        returns instead a 1d data series that is the trace of that one variable.
+        :return: A numeric dataframe where each column corresponds to one of the variables in *attr_names* and row corresponds to one iteration. If *attr_names* is a string instead of a list, returns instead a 1d data series that is the trace of that one variable.
         """
         collapse = False
         if (not hasattr(attr_names, '__getitem__')) or isinstance(attr_names, str):

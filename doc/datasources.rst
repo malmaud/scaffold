@@ -14,6 +14,9 @@ Data sources
 Auxiliary classes
 -------------------
 
-.. autoclass:: Cluster
+.. autoclass:: GaussianCluster
+   :members:
+
+.. autoclass:: BinomialCluster
    :members:
 

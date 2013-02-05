@@ -17,7 +17,6 @@ Contents:
    storage
    datasources
    helpers
-   demo
 
 
 Indices and tables
