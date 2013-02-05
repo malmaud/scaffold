@@ -81,7 +81,7 @@ class Job(object):
         :param iters: If *iters* is an iterable, returns only the iterations of the chain in *iters*. If *iters* is a scalar, return every *iters* state (the stride). If None, returns all states.
         :param via_remote: If *True*, executes the state filtering on the cloud before transferring the data to the local machine. If false, filter the state on the local machine.
         :param run_mode: Controls whether to search for the results on the local macine or on the cloud. Can be *local* or *cloud*.
-        :return:
+        :return: A :py:class:`History` object that contains a filtered version the states of the Markov chain visited when this job ran.
         """
 
         def f():
