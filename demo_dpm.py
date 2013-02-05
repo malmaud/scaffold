@@ -41,7 +41,7 @@ class BinoChain(scaffold.Chain):
         for i in range(n):
             c[i] = self.sample_c(i, c, params, data, s.alpha, state.beta, rng)
         s.c = c
-        s.beta = self.sample_beta(state, rng)
+        s.beta = self.sample_beta(state, params, data, rng)
         return s
 
     # sample_data and sample_latent are optional methods for supporting Geweke testing. You do not have to implement
@@ -57,7 +57,6 @@ class BinoChain(scaffold.Chain):
             cluster = clusters[c[i]]
             x[i] = rng.random_sample(size=dim) < cluster
         return x
-
 
 
     def sample_latent(self, params, data_params, rng):
