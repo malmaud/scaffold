@@ -13,13 +13,14 @@ import matplotlib.pylab as plt
 import hashlib
 import tempfile
 import subprocess
+from scipy import stats
 
 logger = logging.getLogger('scaffold')
 [logger.removeHandler(h) for h in logger.handlers] #for handling module reloading
 logger.setLevel(logging.DEBUG)
 handler = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s-%(name)s-%(levelname)s: %(message)s',
-datefmt = '%H:%M:%S')
+                              datefmt='%H:%M:%S')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
@@ -31,7 +32,7 @@ class ParameterException(BaseException):
     pass
 
 
-def discrete_sample(w, n=1, rng=random, log_mode=False, temperature=None):
+def discrete_sample(w, n=1, rng=random, log_mode=False, flatten=True):
     """
     Sample from a general  discrete distribution.
 
@@ -39,34 +40,26 @@ def discrete_sample(w, n=1, rng=random, log_mode=False, temperature=None):
     :param  n: The number of samples to return.
     :param rng: The random number generator to use (e.g. as returned by *random.RandomState*)
     :param log_mode: If *True*, interpret *w* as the log of the true weights. If *False*, interpret *w* as the literal weights. Default *False*.
-    :param temperature: The soft-max annealing temperature (:math:`\\tau`). *None* indicates not to use soft-max.
 
-    In :math:`\lim \\tau\\to 0`, returns :math:`\\text{argmax}(w)`. In :math:`\lim \\tau\\to\infty`, returns :math:`\sim\\text{DiscreteUniform}(|w|)`
 
     :return: A list of *n* integers, corresponding to the indices of *w* that were chosen.
     """
     w = asarray(w, 'd')
-    softmax = temperature is not None #todo: in softax mode, we are not robust to overflow
     seterr(over='raise', under='raise')
     if log_mode:
-        if softmax:
-            raise BaseException("softmax in logmode not implemented")
         c = logaddexp.accumulate(w)
         c -= c[-1]
         r = log(rng.rand(n))
         value = searchsorted(c, r)
     else:
-        if softmax:
-            w = exp(w/temperature)
         c = cumsum(w)
         c /= c[-1]
         r = rng.rand(n)
         value = searchsorted(c, r)
-    if n==1:
+    if n == 1 and flatten:
         return value[0]
     else:
         return value
-
 
 def save_fig_to_str():
     """
@@ -104,6 +97,44 @@ class frozendict(dict):
 
 class circlelist(list):
     def __getitem__(self, idx):
-        return list.__getitem__(self, idx%len(self))
+        return list.__getitem__(self, idx % len(self))
 
+def estimate_mcmc_var(g, bin_size=10):
+    """
+    Estimate the variance of a population parameter, given autocorrelated samples of the parameter
+    :param g: Numpy 1d array
+    :return: Scalar variance estimate
+    """
 
+    n = len(g)
+    n_burn = int(.2*n)
+    g_steady = g[n_burn:]
+    n = len(g_steady)
+    #todo: the  bin size should be automatically calculated
+    bins = array_split(g_steady, int(n/bin_size))
+    means = [mean(bin) for bin in bins]
+    v = var(means)
+    return v/len(bins)
+
+def qq_plot(s1, s2):
+    """
+    Produce a quantile-quantile plot
+    :param s1: A one-dimensional series
+    :param s2: A one-dimensional series
+    :return:
+    """
+    p = linspace(.1, 99, 100)
+    q1 = [stats.scoreatpercentile(s1, _) for _ in p]
+    q2 = [stats.scoreatpercentile(s2, _) for _ in p]
+    plt.scatter(q1, q2)
+    plt.grid()
+    a = plt.axis()
+    lower = min([a[0], a[2]])
+    upper = max([a[1], a[3]])
+    return plt.plot([lower, upper], [lower, upper], color='red')
+
+def expected_tables(alpha, n):
+    s = 0
+    for i in range(n):
+        s += alpha/(alpha+i-1)
+    return s

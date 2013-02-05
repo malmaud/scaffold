@@ -17,6 +17,7 @@ import helpers
 from scaffold import logger
 import abc
 
+
 class DataStore(object):
     """
     Simple abstract data persistence interface, based around storing and retrieving
@@ -58,12 +59,14 @@ class DataStore(object):
         else:
             return key
 
+
 class LocalStore(DataStore):
     """
     Implements a data store using the Python *shelve* library, where the shelf is stored locally.
 
     Useful for debugging. Write-storage is not thread-safe.
     """
+
     def __init__(self, filename='data/data.shelve'):
         DataStore.__init__(self)
         self.filename = filename
@@ -83,6 +86,7 @@ class LocalStore(DataStore):
     def __contains__(self, item):
         return self.hash_key(item) in self.shelve.keys()
 
+
 class CloudStore(DataStore):
     """
     Implements a data store using the picloud *bucket* system. The objects must be serialiable via the *cPickle* library.
@@ -90,6 +94,7 @@ class CloudStore(DataStore):
     Note that picloud charges both for storage and for transmitting data, so maybe best not to store gigantic objects
     with this system.
     """
+
     def __init__(self, path='scaffold'):
         DataStore.__init__(self)
         self.path = path
@@ -111,7 +116,7 @@ class CloudStore(DataStore):
         print "checking cache"
         print item
         print self.hash_key(item)
-        logger.debug("bucket list is %r"  % cloud.bucket.list())
+        logger.debug("bucket list is %r" % cloud.bucket.list())
         return self.hash_key(item) in cloud.bucket.list()
 
     

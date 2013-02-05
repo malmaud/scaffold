@@ -16,10 +16,12 @@ import storage
 
 picloud_env = "malmaud"
 
+
 def get_chain(params, seed):
-        cls = registry[params['chain_class']]
-        chain = cls(seed=seed, **params)
-        return chain
+    cls = registry[params['chain_class']]
+    chain = cls(seed=seed, **params)
+    return chain
+
 
 class Job(object):
     """
@@ -39,7 +41,7 @@ class Job(object):
     params = property(get_params)
 
     def __init__(self, method=None, data_src=None, method_seed=0, data_seed=0):
-        self.method, self.data_src, self.method_seed, self.data_seed = \
+        self.method, self.data_src, self.method_seed, self.data_seed =\
         method, data_src, method_seed, data_seed
         self.job_id = None
 
@@ -47,7 +49,7 @@ class Job(object):
         return hash(self.params)
 
     def __eq__(self, other):
-        return self.params==other.params #untested
+        return self.params == other.params #untested
 
     def get_data(self):
         """
@@ -55,8 +57,7 @@ class Job(object):
         """
         cls = registry[self.data_src['data_class']]
         data = cls(seed=self.data_seed, **self.data_src)
-        #data.load()
-        #data.init(seed=self.data_seed, **self.data_src)
+        data._load_data() #todo: maybe dont call this automatically
         return data
 
     def get_chain(self):
@@ -70,14 +71,14 @@ class Job(object):
 
     def __str__(self):
         s = cStringIO.StringIO()
-        print >>s, "Method: %r" % self.method
-        print >>s, "Data source: %r" % self.data_src
-        print >>s, "Seeds: (Method %r, Data %r)" % (self.method_seed, self.data_seed)
+        print >> s, "Method: %r" % self.method
+        print >> s, "Data source: %r" % self.data_src
+        print >> s, "Seeds: (Method %r, Data %r)" % (self.method_seed, self.data_seed)
         return s.getvalue()
 
     def fetch_results(self, iters=None, via_remote=False, run_mode='cloud'):
         def f():
-            if run_mode=='cloud':
+            if run_mode == 'cloud':
                 store = storage.CloudStore()
             else:
                 store = storage.LocalStore()
@@ -94,6 +95,7 @@ class Job(object):
             partial_history.job = self
             partial_history.summary = full_history.summary
             return partial_history
+
         if via_remote:
             job_id = cloud.call(f, _env=picloud_env)
             return cloud.result(job_id)
@@ -107,13 +109,14 @@ class Job(object):
             store = storage.CloudStore()
         else:
             store = storage.LocalStore()
-        # Calculating the key outside of the cloud is necessary since the hashing functions on the cloud may not
+            # Calculating the key outside of the cloud is necessary since the hashing functions on the cloud may not
         # agree with the local hashing functions (might be a 32-bit vs 64-bit python issue).
         self.key = store.hash_key(self.params)
+
         def f():
             if run_mode == "cloud":
                 store = storage.CloudStore()
-            elif run_mode=="local":
+            elif run_mode == "local":
                 store = storage.LocalStore()
             else:
                 raise BaseException("Run mode %r not recognized" % run_mode)
@@ -125,11 +128,11 @@ class Job(object):
             logger.debug("Running job")
             #chain = self.get_chain()
             #data = self.get_data()
-            data.load()
+            data._load_data()
             chain.data = data.train_data
             chain.data_source = data
             ioff()
-            states = chain.run()
+            states = chain._run()
             ion()
             logger.debug('Chain completed')
             history = History()
@@ -139,14 +142,12 @@ class Job(object):
             history.summary = chain.summarize(history)
             logger.debug("Chain summarized")
             logger.debug("Job params: %r" % (self.params,))
-            #logger.debug("Raw hash: %r" % hash(self.params))
-            #logger.debug("Hash value: %r" % store.hash_key(self.params))
-            #store.raw_store(self.key, history)
             store[self.key] = history
             store.close()
-        if run_mode=='local':
+
+        if run_mode == 'local':
             return f()
-        elif run_mode=='cloud':
+        elif run_mode == 'cloud':
             job_id = cloud.call(f, _env=picloud_env)
             self.job_id = job_id
             return job_id
@@ -159,6 +160,7 @@ class Experiment(object):
     More precisely, it is the Cartesian product of four sets:
     {Algorithms}*{Data source}*{Seeds for algorithm}*{Seeds for data sources}
     """
+
     def __init__(self):
         self.methods = []
         self.data_srcs = []
@@ -180,12 +182,13 @@ class Experiment(object):
         logger.debug('Running experiment')
         cloud_job_ids = []
         self.run_params = kwargs.copy()
-        run_mode = kwargs['run_mode']
+        run_mode = kwargs.get('run_mode', 'local')
+        self.run_mode = run_mode
         for job in self.iter_jobs():
             result = job.run(**kwargs)
             if run_mode == 'cloud':
                 cloud_job_ids.append(result)
-        if run_mode=='cloud':
+        if run_mode == 'cloud':
             logger.info("Waiting for cloud jobs to finish")
             cloud.join(cloud_job_ids)
             logger.info("Cloud jobs finished")
@@ -195,7 +198,7 @@ class Experiment(object):
         if self.jobs is None:
             raise BaseException("Must run experiment before results can be fetched")
         self.results = []
-        kwargs['run_mode'] = self.run_params['run_mode']
+        kwargs['run_mode'] = self.run_mode
         for job in self.jobs:
             self.results.append(job.fetch_results(**kwargs))
         return self.results
@@ -215,7 +218,8 @@ class History(object):
 
     For MCMC algorithms, corresponds to the 'trace' as used in the R MCMC package.
 
-    A history includes the state of an algorithm at each iteration, as well as summary statistics and graphs that have been pre-computed using the :py:meth:`State.summarize` methods and :py:meth:`Chain.summarize` method.
+    A history includes the state of an algorithm at each iteration, as well as summary statistics and graphs
+    that have been pre-computed using the :py:meth:`State.summarize` methods and :py:meth:`Chain.summarize` method.
 
     **Attributes**:
 
@@ -225,6 +229,7 @@ class History(object):
     job
      A job description
     """
+
     def __init__(self):
         self.job = None
         self.states = []
@@ -241,7 +246,9 @@ class History(object):
 
         :param attr_names: A list of names of names to return traces for, or a string identifying a single variable.
 
-        :return: A numeric dataframe where each column corresponds to one of the variables in *attr_names* and row corresponds to one iteration. If *attr_names* is a string instead of a list, returns instead a 1d data series that is the trace of that one variable.
+        :return: A numeric dataframe where each column corresponds to one of the variables in *attr_names* and
+        row corresponds to one iteration. If *attr_names* is a string instead of a list,
+        returns instead a 1d data series that is the trace of that one variable.
         """
         collapse = False
         if (not hasattr(attr_names, '__getitem__')) or isinstance(attr_names, str):
@@ -256,7 +263,7 @@ class History(object):
             else:
                 x[:, i] = array([getattr(state, name) for state in self.states], object)
         index = pandas.Index([state.iter for state in self.states], name='Iteration')
-        traces = pandas.DataFrame(x, columns = attr_names, index=index)
+        traces = pandas.DataFrame(x, columns=attr_names, index=index)
         if include_time:
             traces['time'] = self.relative_times()
         if collapse:
@@ -266,6 +273,12 @@ class History(object):
 
     def show_fig(self, fig_name):
         helpers.show_fig(self.summary[fig_name])
+
+    def get_train_data(self):
+        source = self.data
+        source._load_data()
+        return source.train_data
+
 
     data = property(lambda self: self.job.data)
     chain = property(lambda self: self.job.chain)

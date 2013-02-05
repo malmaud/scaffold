@@ -1,5 +1,5 @@
 """
-Classes for representing the state and operators of an interative algorithm.
+Classes for representing the state and operators of an iterative algorithm.
 
 These classes are meant to be inherited from as needed.
 """
@@ -9,20 +9,30 @@ import itertools
 from copy import deepcopy
 from numpy import *
 from helpers import ParameterException
+import helpers
 import abc
+import ipdb
+from scipy import stats
+from collections import namedtuple
+import matplotlib.pyplot as plt
 
+#todo: add underscore to methods meant for internal use
+#todo: clean up API for follow the prior
 
 class JLogger:
     """
     Hack because picloud is complaining about pickling the standard python logger
     """
+
     def debug(self, str):
         print str
 
     def info(self, str):
         print str
 
+
 logger = JLogger()
+
 
 class State(object):
     """
@@ -33,7 +43,9 @@ class State(object):
     At a minimum, a state object will have the following attributes:
 
     iter
-     The iteration number of the algorithm that this state corresponds to. State 0 corresponds to the initial state of the algorithm, before any transitions have been applied. The last state is the state that caused :py:meth:`Chain.do_stop` to return *True*.
+     The iteration number of the algorithm that this state corresponds to. State 0 corresponds to the initial state
+     of the algorithm, before any transitions have been applied. The last state is the state that
+     caused :py:meth:`Chain.do_stop` to return *True*.
 
     time
      The time (in seconds since epoch) that this state was created. Mainly used to assess runtime of algorithms.
@@ -48,9 +60,11 @@ class State(object):
 
     def summarize(self):
         """
-        Perform any work on computing summary statistics or visualizations of this iteration. Typically executing at end of an MCMC run.
+        Perform any work on computing summary statistics or visualizations of this iteration.
+        Typically executing at end of an MCMC run.
 
-        Main purpose is to allow for remote computation of state summary, rather than having the state pulled back to the client and then having the client create visualizations.
+        Main purpose is to allow for remote computation of state summary, rather than having the state pulled
+        back to the client and then having the client create visualizations.
 
         **Warning**: Should depend *only* on the instance variables defined in the state object.
         """
@@ -74,7 +88,9 @@ class State(object):
     def sample_data(self, n_data):
         pass
 
+
 registry = {}
+
 
 class RegisteredClass(abc.ABCMeta):
     def __init__(cls, name, bases, attrs):
@@ -82,6 +98,29 @@ class RegisteredClass(abc.ABCMeta):
         if name in registry:
             logger.debug("Name conflict in registered class")
         registry[name] = cls
+
+
+GewekeTest = namedtuple('GewekeTest', ['p', 'z', 'cs', 'mc', 'g'])
+
+
+def plot_test(results):
+    if True:
+    #if isinstance(results, GewekeTest):
+        g = results.g
+        n_tests = g.shape[0]
+        fig, plts = plt.subplots(3, n_tests, squeeze=False)
+        for i in range(n_tests):
+            plt.sca(plts[0, i])
+            g1 = g[i, :, 0]
+            g2 = g[i, :, 1]
+            helpers.qq_plot(g1, g2)
+            plt.sca(plts[1, i])
+            plt.hist(g1)
+            plt.sca(plts[2, i])
+            plt.hist(g2)
+    else:
+        raise BaseException("Result not recognized")
+
 
 class Chain(object):
     """
@@ -98,35 +137,28 @@ class Chain(object):
          The random seed used for the iterative algorithm
 
         follow_prior (Default *False*)
-         A boolean value indicating whether the 'observed' variables should be resampled after each iteration for debugging the transition operator, or instead should be clamped to the data vector assigned to the chain
+         A boolean value indicating whether the 'observed' variables should be resampled after each iteration
+         for debugging the transition operator, or instead should be clamped to the data vector assigned to the chain
 
         n_data (Default 10)
-         If *follow_prior* is **True**, this is how many data points of data to train the model on. Otherwise, has no effect.
+         If *follow_prior* is **True**, this is how many data points of data to train the model on.
+          Otherwise, has no effect.
 
         All other keys are passed through to the derived class.
         """
         self.params = kwargs
         self.seed = kwargs.get('seed', 0)
-        self.max_runtime = kwargs.get('max_runtime', 60*30)
-        self.max_iters = kwargs.get('max_iters', inf)
+        self.max_runtime = kwargs.get('max_runtime', 60 * 30)
+        self.max_iters = kwargs.get('max_iters', 1000)
         self.rng = random.RandomState(self.seed)
         self.data = None
         self.follow_prior = kwargs.get('follow_prior', False)
-        if self.follow_prior:
-            self.n_data_prior = kwargs.get('n_data', 10)
         self.start_time = None
         self.end_time = None
 
-    def get_n_data(self):
-        if self.follow_prior:
-            return self.n_data_prior
-        else:
-            return len(self.data)
-
-    n_data = property(get_n_data)
 
     @abc.abstractmethod
-    def transition(self, state):
+    def transition(self, state, params, data, rng):
         """
         Implementation of the transition operator. Expected to be implemented in a user-derived subclass.
 
@@ -136,10 +168,10 @@ class Chain(object):
         """
         pass
 
-    def get_net_runtime(self):
+    def _get_net_runtime(self):
         return time.time() - self.start_time
 
-    net_runtime = property(get_net_runtime)
+    net_runtime = property(_get_net_runtime)
 
     def _should_stop(self, state):
         if self.do_stop(state):
@@ -162,44 +194,52 @@ class Chain(object):
         return False
 
     @abc.abstractmethod
-    def start_state(self):
+    def start_state(self, params, data, rng):
         """
         :return: The initial state of the algorithm
 
         """
+
         pass
 
-    def attach_state_metadata(self, state, iter):
+    def _attach_state_metadata(self, state, iter):
         state.iter = iter
         state.time = time.time()
 
-    def sample_data(self, state):
+    def sample_data(self, state, params, data_params, rng):
+        logger.debug('Resampling data method not implemented')
+
+    def sample_latent(self, params, data_params, rng):
         pass
 
-    def run(self):
-        """
-        Actually executes the algorithm. Starting with the state returned  by :py:meth:`start_state`, continues to call :py:meth:`transition` to retrieve subsequent states of the algorithm, until :py:meth:`do_stop` indicates the algorithm should terminate.
+    def sample_state(self, data_params):
+        s = self.sample_latent(self.params, data_params, self.rng)
+        s.data = self.sample_data(s, self.params, data_params, self.rng)
+        return s
 
-        :return: A list of :py:class:`State` objects, representing the state of the algorithm at the start of each iteration. **Exception**: The last state is the list is the state at the end of the last iteration.
+    def _run(self):
+        """
+        Actually executes the algorithm. Starting with the state returned  by :py:meth:`start_state`,
+        continues to call :py:meth:`transition` to retrieve subsequent states of the algorithm,
+        until :py:meth:`do_stop` indicates the algorithm should terminate.
+
+        :return: A list of :py:class:`State` objects, representing the state of the algorithm
+        at the start of each iteration. **Exception**: The last state is the list is the state at
+        the end of the last iteration.
         """
         logger.debug('Running chain')
         if self.data is None:
             raise ParameterException("Data source not set when trying to run chain")
         states = []
         self.start_time = time.time()
-        state = self.start_state()
-        self.attach_state_metadata(state, 0)
-        if self.follow_prior:
-            self.sample_data(state)
+        state = self.start_state(self.params, dict(n=len(self.data), dim=len(self.data.shape)), self.rng)
+        self._attach_state_metadata(state, 0)
         for iter in itertools.count():
-            if iter%50==0:
+            if iter % 50 == 0:
                 logger.debug("Chain running iteration %d" % iter)
             states.append(state)
-            new_state = self.transition(state)
-            if self.follow_prior:
-                self.sample_data(new_state)
-                #new_state.sample_data(self.n_data, self.rng)
-            self.attach_state_metadata(new_state, iter+1)
+            new_state = self.transition(state, self.params, self.data, self.rng)
+            self._attach_state_metadata(new_state, iter + 1)
             if self._should_stop(new_state):
                 states.append(new_state)
                 break
@@ -210,6 +250,38 @@ class Chain(object):
         logger.debug("States summarized")
         self.end_time = time.time()
         return states
+
+
+    def geweke_test(self, M, data_params, g_funcs):
+        mc_sim = []
+        for i in range(M):
+            state = self.sample_state(data_params)
+            mc_sim.append(state)
+        cs_sim = []
+        theta = self.start_state(self.params, data_params, self.rng)
+        for i in range(M):
+            if i%100==0:
+                logger.debug("Iteration %d"  % i)
+            y = self.sample_data(theta, self.params, data_params, self.rng)
+            theta = self.transition(theta, self.params, y, self.rng)
+            theta.data = y
+            cs_sim.append(deepcopy(theta))
+        n_tests = len(g_funcs)
+        g_vals = empty((n_tests, M, 2))
+        p = empty(n_tests)
+        z = empty(n_tests)
+        for i in range(n_tests):
+            for m in range(M):
+                g_vals[i, m, 0] = g_funcs[i](mc_sim[m])
+                g_vals[i, m, 1] = g_funcs[i](cs_sim[m])
+            g_mean_mc = mean(g_vals[i, :, 0])
+            g_mean_cs = mean(g_vals[i, :, 1])
+            g_var_mc = var(g_vals[i, :, 0])/M
+            g_var_cs = helpers.estimate_mcmc_var(g_vals[i, :, 1])
+            z[i] = (g_mean_mc - g_mean_cs) / sqrt((g_var_mc + g_var_cs))
+            p[i] = 2 * stats.norm(0, 1).cdf(-abs(z[i]))
+        return GewekeTest(p=p, z=z, cs=cs_sim, mc=mc_sim, g=g_vals)
+
 
     def get_data(self, state):
         if self.follow_prior:
@@ -225,6 +297,7 @@ class Chain(object):
 
     def show(self, **kwargs):
         pass
+
 
 class DataSource(object):
     """
@@ -253,43 +326,44 @@ class DataSource(object):
         self.rng = random.RandomState(self.seed)
         self.data = None
         self.test_fraction = kwargs.get('test_fraction', .2)
-        self.params = kwargs
+        self.params = kwargs #todo: deal with unhashable parameters automatically
         self.loaded = False
 
 
     @abc.abstractmethod
-    def load_data(self):
+    def load(self, params, rng):
+        # expected to set self.data to a numpy array
         pass
 
-    def load(self):
+    def _load_data(self):
         """
         Load/generate the data into memory
         """
         if self.loaded:
             logger.debug("Dataset is trying to load after already being loaded")
             return
-        self.load_data()
+        self.load(self.params, self.rng)
         if self.data is None:
             raise BaseException("Datasouce 'load_data' method failed to create data attribute")
-        self.split_data(self.test_fraction)
+        self._split_data(self.test_fraction)
         self.loaded = True
 
-    def get_train_data(self):
+    def _get_train_data(self):
         """
 
         :return: Training data
         """
         return self.data[self.train_idx]
 
-    def get_test_data(self):
+    def _get_test_data(self):
         """
 
         :return: Held-out test data
         """
         return self.data[self.test_idx]
 
-    train_data = property(get_train_data)
-    test_data = property(get_test_data)
+    train_data = property(_get_train_data)
+    test_data = property(_get_test_data)
 
     def size(self):
         """
@@ -298,19 +372,21 @@ class DataSource(object):
         """
         return len(self.data)
 
-    def split_data(self, test_fraction):
+    def _split_data(self, test_fraction):
         """
         Splits the data into a training dataset and test dataset. Meant for internal use only.
 
-        :param test_fraction: Fraction of data to put in the test training set. 1-test_fraction is put into the training set.
+        :param test_fraction: Fraction of data to put in the test training set.
+        1-test_fraction is put into the training set.
         :type test_fraction: float
         """
         n = self.size()
-        n_test = int(test_fraction*n)
+        n_test = int(test_fraction * n)
         idx = arange(n)
         self.rng.shuffle(idx)
         self.test_idx = idx[0:n_test]
         self.train_idx = idx[n_test:]
+
 
 class ProceduralDataSource(DataSource):
     def __init__(self, **kwargs):
@@ -320,18 +396,12 @@ class ProceduralDataSource(DataSource):
     def llh_pred(self, x):
         """
         For procedural datasets, the log-likelihood of generating the data in *x* given the latent variables of the model
-        :param x:
-        :return:
         """
         pass
 
-    def branch(self, seed): #untested
+    def branch(self, seed):
+        #todo: test
         params = self.params.copy()
-        params['seed']= seed
+        params['seed'] = seed
         new_src = type(self)(**params)
         return new_src
-
-
-
-
-

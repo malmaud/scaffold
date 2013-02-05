@@ -5,13 +5,16 @@ Implementation of some common procedurally-generated datasets
 from __future__ import division
 from matplotlib.patches import Ellipse
 from matplotlib.pylab import *
+from numpy import asarray, random, empty
 from scaffold import ProceduralDataSource, ParameterException
 import helpers
 
-class Cluster:
+
+class GaussianCluster:
     """
     A Gaussian cluster parameterized by a mean vector and covariance matrix
     """
+
     def __init__(self, mu=None, cov=None):
         self.mu = None
         self.cov = None
@@ -38,14 +41,15 @@ class Cluster:
         return rng.multivariate_normal(self.mu, self.cov, size=int(n))
 
     def __hash__(self):
-        return hash(str(self.mu)+str(self.cov))
+        return hash(str(self.mu) + str(self.cov))
 
     def __str__(self):
         return str(self.mu) + "," + str(self.cov)
 
 
-class FiniteMixture(ProceduralDataSource):
 
+
+class FiniteMixture(ProceduralDataSource):
     """
     A Gaussian finite mixture model
     """
@@ -53,9 +57,9 @@ class FiniteMixture(ProceduralDataSource):
     def __init__(self, **kwargs):
         super(FiniteMixture, self).__init__(**kwargs)
 
-    def load_data(self):
+    def load(self, params, rng):
         """
-        Loads the latent variables and data implicitly given by the class's parameters (in *self.param*)
+        Loads the latent variables and data
 
         Expected parameter keys:
 
@@ -69,21 +73,24 @@ class FiniteMixture(ProceduralDataSource):
          A list of mixing weights for each cluster in *clusters*
         """
         try:
-            self.n_points = self.params['n_points']
-            self.clusters = self.params['clusters']
-            self.weights = asarray(self.params['weights'])
+            n_points = params['n_points']
+            clusters = params['clusters']
+            weights = asarray(params['weights'])
+            self.clusters = clusters
         except KeyError as error:
             raise ParameterException("Required finite mixture parameter not passed in: %r" % error)
-        dim = self.clusters[0].dim()
-        self.c = helpers.discrete_sample(self.weights, self.n_points, self.rng)
-        self.data = empty((self.n_points, dim))
-        for i, cluster in enumerate(self.clusters):
-            idx = self.c==i
+        dim = clusters[0].dim
+        self.c = helpers.discrete_sample(weights, n_points, rng)
+        self.data = empty((n_points, dim))
+        for i, cluster in enumerate(clusters):
+            idx = self.c == i
             n_in_cluster = int(sum(idx))
-            self.data[idx] = cluster.sample_points(n_in_cluster, self.rng)
+            self.data[idx] = cluster.sample_points(n_in_cluster, rng)
 
     def points_in_cluster(self, c):
-        return self.data[self.c==c]
+        return self.data[self.c == c]
+
+    dim = property(lambda self: len(self.clusters[0].dim))
 
     def show(self):
         colors = helpers.circlelist(['red', 'blue', 'orange', 'green', 'yellow'])
@@ -99,6 +106,7 @@ class FiniteMixture(ProceduralDataSource):
     def llh_pred(self, x):
         pass #todo: implement this
 
+
 class EmptyData(ProceduralDataSource):
     def __init__(self, **kwargs):
         super(EmptyData, self).__init__(**kwargs)
@@ -106,3 +114,18 @@ class EmptyData(ProceduralDataSource):
     def load_data(self):
         self.data = empty(0)
 
+
+class BinomialCluster:
+    def __init__(self, p=None):
+        self.p = asarray(p, float)
+
+    dim = property(lambda self: len(self.p))
+
+    def sample_points(self, n, rng=random):
+        x = empty((n, self.dim), bool)
+        for i in range(n):
+            x[i] = rng.rand(self.dim) < self.p
+        return x
+
+    def __hash__(self):
+        return hash(str(self.p))

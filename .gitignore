@@ -7,3 +7,6 @@ scratch.py
 .DS_Store
 *~
 .#*
+*.c
+build
+*.so
