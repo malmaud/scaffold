@@ -180,6 +180,11 @@ class Experiment(object):
     An experiment is the running of difference algorithms on different datasets.
     More precisely, it is the Cartesian product of four sets:
     {Algorithms}*{Data source}*{Seeds for algorithm}*{Seeds for data sources}
+
+    :ivar methods: A list of method descriptors
+    :ivar data_srcs: A list of data source descriptors
+    :ivar method_seeds: A list of method seeds
+    :ivar data_seeds: A list of data source seeds
     """
 
     def __init__(self):
