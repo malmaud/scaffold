@@ -11,7 +11,6 @@ from numpy import *
 from helpers import ParameterException
 import helpers
 import abc
-import ipdb
 from scipy import stats
 from collections import namedtuple
 import matplotlib.pyplot as plt

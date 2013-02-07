@@ -8,18 +8,20 @@ import itertools
 import cloud
 from matplotlib.pyplot import ioff, ion
 from numpy import array, empty
+from numpy import *
 import pandas
 import helpers
 from helpers import frozendict
 from scaffold import registry, logger
 import storage
 
+
 picloud_env = "malmaud" #todo: this should configurable somewhere
 
 
-def get_chain(params, seed):
+def get_chain(params):
     cls = registry[params['chain_class']]
-    chain = cls(seed=seed, **params)
+    chain = cls(**params)
     return chain
 
 
@@ -30,19 +32,16 @@ class Job(object):
 
     method = None
     data_src = None
-    method_seed = 0
-    data_seed = 0
 
     def get_params(self):
         method = frozendict(self.method)
         data_src = frozendict(self.data_src)
-        return (method, data_src, self.method_seed, self.data_seed)
+        return (method, data_src)
 
     params = property(get_params)
 
-    def __init__(self, method=None, data_src=None, method_seed=0, data_seed=0):
-        self.method, self.data_src, self.method_seed, self.data_seed =\
-        method, data_src, method_seed, data_seed
+    def __init__(self, method=None, data_src=None):
+        self.method, self.data_src =method, data_src
         self.job_id = None
 
     def __hash__(self):
@@ -55,14 +54,14 @@ class Job(object):
         """
         """
         cls = registry[self.data_src['data_class']]
-        data = cls(seed=self.data_seed, **self.data_src)
+        data = cls(**self.data_src)
         data._load_data() #todo: maybe dont call this automatically
         return data
 
     def get_chain(self):
         """
         """
-        return get_chain(self.method, self.method_seed)
+        return get_chain(self.method)
 
     data = property(get_data)
     chain = property(get_chain)
@@ -71,10 +70,9 @@ class Job(object):
         s = cStringIO.StringIO()
         print >> s, "Method: %r" % self.method
         print >> s, "Data source: %r" % self.data_src
-        print >> s, "Seeds: (Method %r, Data %r)" % (self.method_seed, self.data_seed)
         return s.getvalue()
 
-    def fetch_results(self, iters=None, via_remote=True, run_mode='cloud'):
+    def fetch_results(self, iters=None, via_remote=False, run_mode='local'):
         """
         Returns the result of the job that has already been run as a :py:class:`History` object. Typically you would call :py:meth:`run` first, then call :py:meth:`fetch_results` to get the resutlts. The method has various methods to control how much of the job is returned, to avoid excessive memory usage and data transfer between the cloud and local machine.
 
@@ -86,6 +84,7 @@ class Job(object):
 
         def f():
             if run_mode == 'cloud':
+                cloud.join([self.job_id])
                 store = storage.CloudStore()
             else:
                 store = storage.LocalStore()
@@ -173,6 +172,24 @@ class Job(object):
             self.job_id = job_id
             return job_id
 
+class ForEach(list):
+    pass
+
+def iter_for_each(method):
+    assert isinstance(method, dict)
+    m_mod = {}
+    for k, v in method.iteritems():
+        if isinstance(v, ForEach):
+            m_mod[k] = v
+        else:
+            m_mod[k] = ForEach([v])
+    keys = m_mod.keys()
+    for v in itertools.product(*m_mod.values()):
+        m = {}
+        for i, k in enumerate(keys):
+            m[k] = v[i]
+        yield m
+
 
 class Experiment(object):
     """
@@ -190,35 +207,50 @@ class Experiment(object):
     def __init__(self):
         self.methods = []
         self.data_srcs = []
-        self.method_seeds = []
-        self.data_seeds = []
         self.run_mode = None
         self.results = None
         self.jobs = None
+        self.configured = False
+
+    def configure(self, methods, data_sources):
+        if isinstance(methods, dict):
+            methods = [methods]
+        if isinstance(data_sources, dict):
+            data_sources = [data_sources]
+        self.data_srcs = data_sources
+        self.methods = methods
+        self.configured = True
+
 
     def iter_jobs(self):
-        for job_parms in itertools.product(self.methods, self.data_srcs, self.method_seeds, self.data_seeds):
-            job = Job(*job_parms)
-            yield job
+        for data_src in self.data_srcs:
+            for data_src_conf in iter_for_each(data_src):
+                for method in self.methods:
+                    for method_conf in iter_for_each(method):
+                        job = Job(method_conf, data_src_conf)
+                        yield job
 
     def run(self, **kwargs):
         """
         Runs the experiment. If the experiment is run on the cloud, blocks until all jobs complete.
         """
+        if not self.configured:
+            raise BaseException("Must configure experiment first")
         logger.debug('Running experiment')
         cloud_job_ids = []
         self.run_params = kwargs.copy()
         run_mode = kwargs.get('run_mode', 'local')
         self.run_mode = run_mode
+        self.jobs = []
         for job in self.iter_jobs():
             result = job.run(**kwargs)
             if run_mode == 'cloud':
                 cloud_job_ids.append(result)
+            self.jobs.append(job)
         if run_mode == 'cloud':
             logger.info("Waiting for cloud jobs to finish")
             cloud.join(cloud_job_ids)
             logger.info("Cloud jobs finished")
-        self.jobs = list(self.iter_jobs())
 
     def fetch_results(self, **kwargs):
         if self.jobs is None:

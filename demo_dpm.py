@@ -12,6 +12,7 @@ from datasources import BinomialCluster
 import scaffold
 import helpers
 import runner
+from runner import ForEach
 
 
 gammaln = special.gammaln
@@ -20,7 +21,7 @@ betaln = special.betaln
 # To use scaffold, you need to inherit from at least two classes: scaffold.State and scaffold.Chain
 
 class State(scaffold.State):
-    __slots__ = ['alpha', 'beta', 'c'] #The state of this Markov chain is fully described by these three values.
+    __slots__ = ['alpha', 'c'] #The state of this Markov chain is fully described by these three values.
     # alpha is the DPM concentration parameter
     # beta is a hyperparameter used for defining clusters
     # c is a vector, where c[i] is the id of the cluster which datapoint 'i' belongs to.
@@ -39,9 +40,8 @@ class BinoChain(scaffold.Chain):
         s.alpha = self.sample_alpha(state, params, n, rng)
         c = copy(state.c)
         for i in range(n):
-            c[i] = self.sample_c(i, c, params, data, s.alpha, state.beta, rng)
+            c[i] = self.sample_c(i, c, params, data, s.alpha, params['beta'], rng)
         s.c = c
-        s.beta = self.sample_beta(state, params, data, rng)
         return s
 
     # sample_data and sample_latent are optional methods for supporting Geweke testing. You do not have to implement
@@ -49,7 +49,7 @@ class BinoChain(scaffold.Chain):
     def sample_data(self, state, params, data_params, rng):
         _, c = unique(state.c, return_inverse=True)
         n_clusters = len(unique(c))
-        clusters = rng.beta(state.beta, state.beta, size=n_clusters)
+        clusters = rng.beta(state.beta, params['beta'], size=n_clusters)
         n = data_params['n']
         dim = data_params['dim']
         x = zeros((n, dim), bool)
@@ -62,8 +62,6 @@ class BinoChain(scaffold.Chain):
     def sample_latent(self, params, data_params, rng):
         s = State()
         s.alpha = rng.gamma(params['alpha_shape'], scale=params['alpha_scale'])
-        #s.beta = rng.gamma(params['beta_shape'], scale=params['beta_scale'])
-        s.beta = 1
         n = data_params['n']
         c = zeros(n, int)
         for i in range(1, n):
@@ -92,36 +90,6 @@ class BinoChain(scaffold.Chain):
         alpha_llh = calc_alpha_llh(grid)
         alpha = grid[helpers.discrete_sample(alpha_llh, rng=rng, log_mode=True)]
         return alpha
-
-
-    def sample_beta(self, state, params, data, rng):
-        cluster_ids = unique(state.c)
-        n_clusters = len(cluster_ids)
-        dim = data.shape[1]
-        p = empty((n_clusters, dim))
-        for j in range(n_clusters):
-            p[j] = self.sample_cluster(data[state.c == cluster_ids[j]], state.beta, rng)
-        p = p.flatten()
-
-        def calc_beta_llh(beta):
-            prior = stats.gamma.logpdf(params['beta_shape'], params['beta_scale'])
-            lh = sum(stats.beta.logpdf(p, beta, beta))
-            return prior + lh
-
-        grid = linspace(.1, 10, 100)
-        beta_llh = calc_beta_llh(grid)
-        beta = grid[helpers.discrete_sample(beta_llh, rng=rng, log_mode=True)]
-        return beta
-
-    def sample_cluster(self, data, beta, rng):
-        dim = data.shape[1]
-        c = empty(dim)
-        for d in range(dim):
-            x = data[:, d]
-            n_succ = sum(x == True)
-            n_fail = sum(x == False)
-            c[d] = rng.beta(n_succ + beta, n_fail + beta)
-        return c
 
     def sample_c(self, i, c, params, data, dp_alpha, beta, rng, debug=False):
         c_diff = delete(c, i)
@@ -165,23 +133,19 @@ cluster2 = BinomialCluster([.8, .1, .8, .1])
 chain = BinoChain(alpha=1, beta=1, alpha_shape=1, alpha_scale=1, beta_shape=2, beta_scale=1 / 2)
 dp = dict(n=10, dim=5)
 
-# Here we set up the experiment. The experiment class has four fields which need to be filled in: data_seeds, method_seeds,
-# data_srcs, and methods.
+
 expt = runner.Experiment()
-expt.data_seeds = [0]
-expt.method_seeds = [0]
-expt.data_srcs = [dict(data_class='FiniteMixture', clusters=(cluster1, cluster2),
-                       n_points=20,
-                       weights=(.5, .5))]
-expt.methods = [
-    dict(chain_class='BinoChain', alpha=1, beta=1, alpha_shape=1, alpha_scale=1, beta_shape=2, beta_scale=1 / 2,
-         max_iters=1000)]
+
+method_conf = dict(chain_class='BinoChain',  alpha_shape=1, alpha_scale=1, beta=1, seed=ForEach([0, 1]), max_iters=50)
+
+data_src_conf = dict(data_class='FiniteMixture', clusters=(cluster1, cluster2), n_points=ForEach([5, 20, 50]), weights=(.5, .5), seed=0)
+expt.configure(method_conf, data_src_conf)
+
 
 def run_expt(): #This function will actually run the experiment and return the results. Results are stored in the runner.History object.
-    expt.run()
+    expt.run(use_cache=False, run_mode='cloud')
     results = expt.fetch_results()
-    h = results[0]
-    return h
+    return results
 
 def run_tests(n=1000): #This function will run a Geweke test to make sure the Gibbs sampler is implemented correctly.
     tests = [lambda state: state.alpha, lambda state: len(unique(state.c)),
