@@ -23,11 +23,7 @@ class GaussianCluster:
         if cov is not None:
             self.cov = asarray(cov, 'd')
 
-    def dim(self):
-        """
-        :return: The cluster dimensionality
-        """
-        return len(self.mu)
+    dim = property(lambda self: len(self.mu))
 
     def sample_points(self, n, rng=random):
         """
@@ -128,7 +124,7 @@ class BinomialCluster:
     dim = property(lambda self: len(self.p))
 
     def sample_points(self, n, rng=random):
-        x = empty((n, self.dim), bool)
+        x = empty((n, self.dim), int)
         for i in range(n):
             x[i] = rng.rand(self.dim) < self.p
         return x

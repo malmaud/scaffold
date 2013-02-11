@@ -195,13 +195,10 @@ class Experiment(object):
     """
     Encodes the parameters and results of an experiment.
     An experiment is the running of difference algorithms on different datasets.
-    More precisely, it is the Cartesian product of four sets:
-    {Algorithms}*{Data source}*{Seeds for algorithm}*{Seeds for data sources}
+    First configure the experiment with the :py:meth:`configure` method. Then run it with :py:meth:`run`. Finally, fetch the results with :py:meth:`fetch_results`.
 
     :ivar methods: A list of method descriptors
     :ivar data_srcs: A list of data source descriptors
-    :ivar method_seeds: A list of method seeds
-    :ivar data_seeds: A list of data source seeds
     """
 
     def __init__(self):
@@ -213,6 +210,12 @@ class Experiment(object):
         self.configured = False
 
     def configure(self, methods, data_sources):
+        """
+        Configures the experiment, specifying the parameters of all algorithms and data sources the experiment consists of. Each algorithm will be run on each dataset.
+
+        :param methods: A list of dictionaries describing the algorithms.
+        :param data_sources: A list of dictionaries describing the data sources.
+        """
         if isinstance(methods, dict):
             methods = [methods]
         if isinstance(data_sources, dict):

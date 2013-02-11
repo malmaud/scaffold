@@ -93,7 +93,13 @@ class frozendict(dict):
     A hashable dictionary which can be used as the key to other dictionaries
     """
     def get_key(self):
-        return tuple((k, self[k]) for k in sorted(self.keys()))
+        d = []
+        for k in sorted(self.keys()):
+            if isinstance(self[k], list):
+                d.append((k, self[k]))
+            else:
+                d.append((k, self[k]))
+        return tuple(d)
 
     def __hash__(self):
         return hash(self.get_key())
@@ -150,7 +156,10 @@ def qq_plot(s1, s2):
     return plt.plot([lower, upper], [lower, upper], color='red')
 
 def expected_tables(alpha, n):
-    s = 0
-    for i in range(n):
-        s += alpha/(alpha+i-1)
-    return s
+    i = arange(n)
+    return sum(alpha/(alpha+i))
+
+def bar_chart(x):
+    plt.bar(range(len(x)), x, align='center')
+    plt.grid()
+

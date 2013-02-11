@@ -23,7 +23,6 @@ betaln = special.betaln
 class State(scaffold.State):
     __slots__ = ['alpha', 'c'] #The state of this Markov chain is fully described by these three values.
     # alpha is the DPM concentration parameter
-    # beta is a hyperparameter used for defining clusters
     # c is a vector, where c[i] is the id of the cluster which datapoint 'i' belongs to.
 
 
@@ -49,7 +48,7 @@ class BinoChain(scaffold.Chain):
     def sample_data(self, state, params, data_params, rng):
         _, c = unique(state.c, return_inverse=True)
         n_clusters = len(unique(c))
-        clusters = rng.beta(state.beta, params['beta'], size=n_clusters)
+        clusters = rng.beta(params['beta'], params['beta'], size=n_clusters)
         n = data_params['n']
         dim = data_params['dim']
         x = zeros((n, dim), bool)
@@ -149,7 +148,6 @@ def run_expt(): #This function will actually run the experiment and return the r
 
 def run_tests(n=1000): #This function will run a Geweke test to make sure the Gibbs sampler is implemented correctly.
     tests = [lambda state: state.alpha, lambda state: len(unique(state.c)),
-             lambda state: state.beta, lambda state: state.alpha * state.beta,
              lambda state: state.alpha ** 2]
     z = chain.geweke_test(n, dp, tests)
     return z

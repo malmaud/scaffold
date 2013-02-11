@@ -84,9 +84,6 @@ class State(object):
         for k, v in state.iteritems():
             setattr(self, k, v)
 
-    def show(self, **kwargs):
-        pass
-
     def sample_data(self, n_data):
         pass
 
